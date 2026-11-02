@@ -59,7 +59,7 @@ const SUBJECT_CATEGORIES = {
 // -------------------------------------------------------------
 // LAZY PER-SUBJECT QUESTION LOADING (home page loads only the index)
 // -------------------------------------------------------------
-const DATA_VERSION = '20261102a';
+const DATA_VERSION = '20261102b';
 const REPO_ISSUES_URL = 'https://github.com/MuhsinVC/neet-pg-app/issues/new';
 const _subjectLoads = {};
 
@@ -1066,10 +1066,20 @@ function renderCurrentQuestion() {
   const imgContainer = document.getElementById('quiz-image-container');
   const imgElem = document.getElementById('quiz-question-image');
   if (imgContainer && imgElem) {
+    let credit = document.getElementById('quiz-image-credit');
+    if (!credit) {
+      credit = document.createElement('div');
+      credit.id = 'quiz-image-credit';
+      credit.className = 'text-[10px] text-slate-400 mt-1';
+      imgContainer.appendChild(credit);
+    }
     if (q.image_url) {
       imgElem.src = q.image_url;
+      imgElem.alt = q.image_alt || 'Question image';
+      credit.textContent = q.image_credit ? 'Image: ' + q.image_credit : '';
       imgContainer.classList.remove('hidden');
     } else {
+      credit.textContent = '';
       imgContainer.classList.add('hidden');
     }
   }
