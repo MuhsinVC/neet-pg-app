@@ -90,52 +90,84 @@ function saveUserData() {
 }
 
 function updateStatsHeader() {
-  document.getElementById('stat-streak').textContent = `${state.userData.streak || 1} d`;
+  const streakText = `${state.userData.streak || 1} d`;
+  const statStreak = document.getElementById('stat-streak');
+  if (statStreak) statStreak.textContent = streakText;
+
   const dueList = getDueSrsQuestions();
-  document.getElementById('stat-due').textContent = dueList.length;
+  const statDue = document.getElementById('stat-due');
+  if (statDue) statDue.textContent = dueList.length;
   
   const badgeDue = document.getElementById('badge-due');
-  if (dueList.length > 0) {
-    badgeDue.textContent = dueList.length;
-    badgeDue.classList.remove('hidden');
-  } else {
-    badgeDue.classList.add('hidden');
+  if (badgeDue) {
+    if (dueList.length > 0) {
+      badgeDue.textContent = dueList.length;
+      badgeDue.classList.remove('hidden');
+    } else {
+      badgeDue.classList.add('hidden');
+    }
   }
+
+  // Update floating FAB badge & popover items
+  const fabDueBadge = document.getElementById('fab-due-badge');
+  const fabDueCount = document.getElementById('fab-due-count');
+  const fabStreakCount = document.getElementById('fab-streak-count');
+
+  if (fabDueBadge) {
+    if (dueList.length > 0) {
+      fabDueBadge.textContent = dueList.length;
+      fabDueBadge.classList.remove('hidden');
+    } else {
+      fabDueBadge.classList.add('hidden');
+    }
+  }
+  if (fabDueCount) fabDueCount.textContent = dueList.length;
+  if (fabStreakCount) fabStreakCount.textContent = `${state.userData.streak || 1} Day Streak`;
 }
 
 // -------------------------------------------------------------
-// QUESTION FILTER TOGGLE (ALL VS PYQ ONLY)
+// QUESTION FILTER TOGGLE (1. PYQ ONLY, 2. ADDITIONAL, 3. EXTREME)
 // -------------------------------------------------------------
 function updateFilterCounts() {
   if (!state.curriculum) return;
-  let totalAll = 0;
+  let totalAdditional = 0;
   let totalPyq = 0;
+  let totalExtreme = 0;
 
   state.curriculum.subjects.forEach(s => {
     s.units.forEach(u => {
-      totalAll += u.questions.length;
-      totalPyq += u.questions.filter(q => q.question_type === 'PYQ').length;
+      u.questions.forEach(q => {
+        if (q.question_type === 'EXTREME') {
+          totalExtreme++;
+        } else {
+          totalAdditional++;
+          if (q.question_type === 'PYQ') totalPyq++;
+        }
+      });
     });
   });
 
-  const bAll = document.getElementById('badge-count-all');
+  const bAdd = document.getElementById('badge-count-additional');
   const bPyq = document.getElementById('badge-count-pyq');
-  if (bAll) bAll.textContent = totalAll.toLocaleString();
+  const bExt = document.getElementById('badge-count-extreme');
+  if (bAdd) bAdd.textContent = totalAdditional.toLocaleString();
   if (bPyq) bPyq.textContent = totalPyq.toLocaleString();
+  if (bExt) bExt.textContent = totalExtreme.toLocaleString();
 }
 
 function setQuestionFilter(filterType) {
   state.questionFilter = filterType;
-  const btnAll = document.getElementById('toggle-filter-all');
   const btnPyq = document.getElementById('toggle-filter-pyq');
+  const btnAdd = document.getElementById('toggle-filter-additional');
+  const btnExt = document.getElementById('toggle-filter-extreme');
 
-  if (filterType === 'ALL') {
-    btnAll.className = "px-2 sm:px-3 py-1 rounded-lg transition bg-white shadow-sm text-brand-700 font-bold flex items-center space-x-1";
-    btnPyq.className = "px-2 sm:px-3 py-1 rounded-lg transition text-slate-500 hover:text-slate-800 flex items-center space-x-1";
-  } else {
-    btnPyq.className = "px-2 sm:px-3 py-1 rounded-lg transition bg-white shadow-sm text-brand-700 font-bold flex items-center space-x-1";
-    btnAll.className = "px-2 sm:px-3 py-1 rounded-lg transition text-slate-500 hover:text-slate-800 flex items-center space-x-1";
-  }
+  const inactiveClass = "px-2 sm:px-3 py-1 rounded-lg transition text-slate-500 hover:text-slate-800 flex items-center space-x-1";
+  const activeClass = "px-2 sm:px-3 py-1 rounded-lg transition bg-white shadow-sm text-brand-700 font-bold flex items-center space-x-1";
+  const activeExtClass = "px-2 sm:px-3 py-1 rounded-lg transition bg-amber-500 shadow-sm text-slate-950 font-black flex items-center space-x-1";
+
+  if (btnPyq) btnPyq.className = filterType === 'PYQ' ? activeClass : inactiveClass;
+  if (btnAdd) btnAdd.className = filterType === 'ADDITIONAL' ? activeClass : inactiveClass;
+  if (btnExt) btnExt.className = filterType === 'EXTREME' ? activeExtClass : inactiveClass;
 
   // Refresh current view
   if (state.currentView === 'home') renderSubjectsGrid();
@@ -147,7 +179,11 @@ function getFilteredQuestions(questions) {
   if (state.questionFilter === 'PYQ') {
     return questions.filter(q => q.question_type === 'PYQ');
   }
-  return questions;
+  if (state.questionFilter === 'EXTREME') {
+    return questions.filter(q => q.question_type === 'EXTREME');
+  }
+  // 'ADDITIONAL' returns all standard practice questions + authentic PYQs (excludes EXTREME)
+  return questions.filter(q => q.question_type !== 'EXTREME');
 }
 
 // -------------------------------------------------------------
@@ -329,7 +365,7 @@ function renderSubjectUnits() {
       </div>
 
       <div class="pt-3 border-t border-slate-100 flex items-center justify-between flex-wrap gap-2">
-        <span class="text-[11px] text-slate-400 font-medium">${unit.ninja_nerd_topics.length} Key Topics</span>
+        <span class="text-[11px] text-slate-400 font-medium">${(unit.key_topics || unit.topics || []).length} Key Topics</span>
         <div class="flex items-center space-x-1.5">
           <button onclick="openUnitTheory('${state.activeSubject.subject_id}', '${unit.unit_id}')" class="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-xl text-xs font-bold transition flex items-center space-x-1 shadow-sm">
             <i data-lucide="zap" class="w-3.5 h-3.5 text-amber-500 fill-amber-500"></i>
@@ -856,6 +892,34 @@ function formatTime(totalSecs) {
 }
 
 // -------------------------------------------------------------
+// IMAGE MODAL / LIGHTBOX
+// -------------------------------------------------------------
+function openActiveQuestionImage() {
+  const q = state.activeQuestions[state.currentQIndex];
+  if (q && q.image_url) {
+    openImageModal(q.image_url, `${q.exam_source || 'Clinical Image'} • ${q.topic || ''}`);
+  }
+}
+
+function openImageModal(src, caption) {
+  const modal = document.getElementById('image-modal');
+  const img = document.getElementById('image-modal-img');
+  const cap = document.getElementById('image-modal-caption');
+  if (modal && img) {
+    img.src = src;
+    if (cap) cap.textContent = caption || '';
+    modal.classList.remove('hidden');
+  }
+}
+
+function closeImageModal() {
+  const modal = document.getElementById('image-modal');
+  if (modal) {
+    modal.classList.add('hidden');
+  }
+}
+
+// -------------------------------------------------------------
 // QUESTION PRESENTATION & INTERACTION
 // -------------------------------------------------------------
 function renderCurrentQuestion() {
@@ -867,6 +931,18 @@ function renderCurrentQuestion() {
   document.getElementById('quiz-source-badge').textContent = q.exam_source;
   document.getElementById('quiz-topic-tag').textContent = q.topic;
   document.getElementById('quiz-question-text').textContent = q.question;
+
+  // Clinical & Diagnostic Image rendering
+  const imgContainer = document.getElementById('quiz-image-container');
+  const imgElem = document.getElementById('quiz-question-image');
+  if (imgContainer && imgElem) {
+    if (q.image_url) {
+      imgElem.src = q.image_url;
+      imgContainer.classList.remove('hidden');
+    } else {
+      imgContainer.classList.add('hidden');
+    }
+  }
 
   // Subject badge
   const subjName = q.subject_name || (state.activeSubject ? state.activeSubject.name : 'Medical');
@@ -1204,6 +1280,18 @@ function renderReviewList(questions) {
 
       <p class="text-sm font-semibold text-slate-900 leading-snug">${q.question}</p>
 
+      ${q.image_url ? `
+        <div class="my-2.5 inline-block cursor-pointer" onclick="openImageModal('${q.image_url}', '${q.exam_source || 'Clinical Image'} • ${q.topic || ''}')">
+          <div class="flex items-center space-x-2.5 p-2 bg-slate-50 hover:bg-slate-100 rounded-xl border border-slate-200 transition">
+            <img src="${q.image_url}" alt="Clinical Diagram" class="h-20 w-auto rounded-lg object-contain bg-white border border-slate-200" />
+            <span class="text-xs text-brand-600 font-bold flex items-center space-x-1 pr-1">
+              <i data-lucide="zoom-in" class="w-3.5 h-3.5"></i>
+              <span>View High-Res Diagram</span>
+            </span>
+          </div>
+        </div>
+      ` : ''}
+
       <div class="space-y-2">
         ${optionsHtml}
       </div>
@@ -1477,6 +1565,18 @@ function renderNotebookView() {
 
       <h5 class="text-sm font-semibold text-slate-900 leading-snug">${q.question}</h5>
 
+      ${q.image_url ? `
+        <div class="my-2 inline-block cursor-pointer" onclick="openImageModal('${q.image_url}', '${q.exam_source || 'Clinical Image'} • ${q.topic || ''}')">
+          <div class="flex items-center space-x-2 p-1.5 bg-slate-50 hover:bg-slate-100 rounded-xl border border-slate-200 transition">
+            <img src="${q.image_url}" alt="Clinical Diagram" class="h-14 w-auto rounded-lg object-contain bg-white border border-slate-200" />
+            <span class="text-xs text-brand-600 font-bold flex items-center space-x-1">
+              <i data-lucide="zoom-in" class="w-3.5 h-3.5"></i>
+              <span>Inspect Diagram</span>
+            </span>
+          </div>
+        </div>
+      ` : ''}
+
       <div class="bg-rose-50 border border-rose-100 rounded-xl p-3 text-xs text-rose-950 space-y-1.5">
         <div class="flex items-center justify-between font-bold">
           <span class="text-rose-700">Your Answer: Option ${m.userChoice || 'Unattempted'}</span>
@@ -1637,6 +1737,37 @@ function importSyncCode() {
     alert("Invalid backup code format.");
   }
 }
+
+// -------------------------------------------------------------
+// FLOATING ACTION BUTTON (FAB) & QUICK MENU
+// -------------------------------------------------------------
+function toggleFabMenu() {
+  const popover = document.getElementById('fab-menu-popover');
+  const icon = document.getElementById('fab-icon');
+  if (!popover) return;
+  const isHidden = popover.classList.contains('hidden');
+  if (isHidden) {
+    popover.classList.remove('hidden');
+    if (icon) icon.setAttribute('data-lucide', 'x');
+  } else {
+    popover.classList.add('hidden');
+    if (icon) icon.setAttribute('data-lucide', 'sliders');
+  }
+  if (window.lucide) lucide.createIcons();
+}
+
+document.addEventListener('click', (e) => {
+  const container = document.getElementById('fab-container');
+  const popover = document.getElementById('fab-menu-popover');
+  if (container && popover && !container.contains(e.target) && !popover.classList.contains('hidden')) {
+    popover.classList.add('hidden');
+    const icon = document.getElementById('fab-icon');
+    if (icon) {
+      icon.setAttribute('data-lucide', 'sliders');
+      if (window.lucide) lucide.createIcons();
+    }
+  }
+});
 
 // -------------------------------------------------------------
 // UTILITIES & HELPERS

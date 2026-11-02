@@ -36,7 +36,7 @@
       
       <!-- Brand & Title -->
       <div class="flex items-center space-x-2.5 sm:space-x-3 cursor-pointer shrink-0" onclick="goToHome()">
-        <div class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-brand-600 to-indigo-500 text-white flex items-center justify-center shadow-md shadow-brand-500/20">
+        <div class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-md shadow-indigo-600/30">
           <i data-lucide="activity" class="w-5 h-5"></i>
         </div>
         <div>
@@ -48,34 +48,27 @@
         </div>
       </div>
 
-      <!-- Center: PYQ vs All Questions Toggle Switch -->
-      <div class="flex items-center">
-        <div class="inline-flex items-center bg-slate-100 p-0.5 sm:p-1 rounded-xl border border-slate-200 text-[11px] sm:text-xs font-semibold shadow-inner">
-          <button id="toggle-filter-all" onclick="setQuestionFilter('ALL')" class="px-2 sm:px-3 py-1 rounded-lg transition bg-white shadow-sm text-brand-700 font-bold flex items-center space-x-1">
-            <span>🌐 All Qs</span>
-            <span id="badge-count-all" class="text-[10px] bg-brand-50 text-brand-600 px-1 py-0.2 rounded font-normal hidden sm:inline">1,477</span>
+      <!-- Center / Right: 3-Choice Toggle Switch (from left to right: 1. PYQs Only, 2. Additional Questions, 3. Extreme Mode) -->
+      <div class="flex items-center shrink-0">
+        <div class="inline-flex items-center bg-slate-100 p-0.5 sm:p-1 rounded-xl border border-slate-200 text-[10px] sm:text-xs font-semibold shadow-inner">
+          <button id="toggle-filter-pyq" onclick="setQuestionFilter('PYQ')" class="px-2 sm:px-3 py-1 rounded-lg transition bg-white shadow-sm text-brand-700 font-bold flex items-center space-x-1">
+            <span>📌 PYQs<span class="hidden sm:inline"> Only</span></span>
+            <span id="badge-count-pyq" class="text-[9px] sm:text-[10px] bg-brand-50 text-brand-600 px-1 py-0.2 rounded font-normal hidden md:inline">...</span>
           </button>
-          <button id="toggle-filter-pyq" onclick="setQuestionFilter('PYQ')" class="px-2 sm:px-3 py-1 rounded-lg transition text-slate-500 hover:text-slate-800 flex items-center space-x-1">
-            <span>📌 PYQs Only</span>
-            <span id="badge-count-pyq" class="text-[10px] bg-slate-200 text-slate-600 px-1 py-0.2 rounded font-normal hidden sm:inline">2013-2026</span>
+          <button id="toggle-filter-additional" onclick="setQuestionFilter('ADDITIONAL')" class="px-2 sm:px-3 py-1 rounded-lg transition text-slate-500 hover:text-slate-800 flex items-center space-x-1">
+            <span>📚 Additional<span class="hidden sm:inline"> Qs</span></span>
+            <span id="badge-count-additional" class="text-[9px] sm:text-[10px] bg-slate-200 text-slate-600 px-1 py-0.2 rounded font-normal hidden md:inline">...</span>
+          </button>
+          <button id="toggle-filter-extreme" onclick="setQuestionFilter('EXTREME')" class="px-2 sm:px-3 py-1 rounded-lg transition text-amber-700 hover:text-amber-900 flex items-center space-x-1">
+            <span>⚡ Extreme<span class="hidden sm:inline"> Mode</span></span>
+            <span id="badge-count-extreme" class="text-[9px] sm:text-[10px] bg-amber-100 text-amber-800 px-1 py-0.2 rounded font-bold hidden md:inline">Ready</span>
           </button>
         </div>
       </div>
 
-      <!-- Right Header Actions: Streak, Due, Backup -->
-      <div class="flex items-center space-x-1.5 sm:space-x-2.5">
-        <div class="hidden md:flex items-center space-x-1.5 bg-amber-50 border border-amber-200 text-amber-800 px-2.5 py-1 rounded-lg text-xs font-semibold">
-          <i data-lucide="flame" class="w-4 h-4 text-amber-500 fill-amber-500"></i>
-          <span><b id="stat-streak">1</b> d</span>
-        </div>
-        <div class="flex items-center space-x-1 bg-rose-50 border border-rose-200 text-rose-800 px-2.5 py-1 rounded-lg text-xs font-semibold cursor-pointer hover:bg-rose-100 transition" onclick="switchView('srs')" title="Daily Spaced Review">
-          <i data-lucide="refresh-cw" class="w-3.5 h-3.5 text-rose-500"></i>
-          <span>Due: <b id="stat-due">0</b></span>
-        </div>
-        <button onclick="toggleSyncModal()" title="Sync or Backup Progress" class="p-1.5 sm:p-2 border border-slate-200 text-slate-600 hover:text-slate-900 rounded-lg hover:bg-slate-50 transition">
-          <i data-lucide="cloud-sync" class="w-4 h-4"></i>
-        </button>
-      </div>
+      <!-- Hidden compatibility spans for header IDs if accessed by legacy scripts -->
+      <span id="stat-streak" class="hidden">1</span>
+      <span id="stat-due" class="hidden">0</span>
     </div>
   </header>
 
@@ -128,7 +121,7 @@
           </div>
           <h2 class="text-xl sm:text-3xl font-extrabold tracking-tight mb-2">NEET PG Preparation Hub</h2>
           <p class="text-slate-300 text-xs sm:text-sm leading-relaxed mb-4">
-            Study high-yield clustered units with Professor Zach Murphy's framework for Pharmacology, full organ-system coverage for Medicine and Surgery, diagnostic recall tests, and persistent spaced repetition.
+            Master high-yield clustered clinical units across all 19 medical subjects with diagnostic recall tests, authentic Previous Year Questions, Extreme Mode question pools, and persistent spaced repetition.
           </p>
 
           <!-- Action Buttons in Hero -->
@@ -189,7 +182,7 @@
           </div>
           <div class="flex items-center space-x-2.5">
             <h3 id="subject-page-title" class="text-xl sm:text-2xl font-bold text-slate-900">Pharmacology</h3>
-            <span id="subject-page-badge" class="bg-indigo-50 text-indigo-700 text-xs font-bold px-2.5 py-0.5 rounded-full">Zach's Units</span>
+            <span id="subject-page-badge" class="bg-indigo-50 text-indigo-700 text-xs font-bold px-2.5 py-0.5 rounded-full">Clinical Units</span>
           </div>
           <p id="subject-page-desc" class="text-xs text-slate-500 mt-1 max-w-xl">
             Clustered according to high-yield clinical physiology framework.
@@ -512,6 +505,19 @@
             Loading question text...
           </h4>
 
+          <!-- Clinical & Diagnostic Image Container -->
+          <div id="quiz-image-container" class="hidden my-3">
+            <div class="relative group cursor-pointer inline-block rounded-xl overflow-hidden border border-slate-200 bg-slate-50 p-1 hover:border-brand-400 transition" onclick="openActiveQuestionImage()">
+              <img id="quiz-question-image" src="" alt="Clinical Question Diagram" class="max-h-56 sm:max-h-64 rounded-lg object-contain mx-auto" />
+              <div class="absolute inset-0 bg-slate-900/10 group-hover:bg-slate-900/25 transition flex items-center justify-center pointer-events-none">
+                <span class="bg-slate-900/80 text-white text-[11px] font-semibold px-2.5 py-1 rounded-full shadow backdrop-blur-sm flex items-center space-x-1">
+                  <svg class="w-3.5 h-3.5 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7"></path></svg>
+                  <span>Tap to Zoom / Fullscreen</span>
+                </span>
+              </div>
+            </div>
+          </div>
+
           <!-- Options Container -->
           <div id="quiz-options-container" class="space-y-2.5">
             <!-- Injected via JavaScript -->
@@ -809,8 +815,89 @@
     </div>
   </div>
 
+  <!-- MODAL 3: IMAGE LIGHTBOX (CLICK TO ZOOM CLINICAL IMAGES) -->
+  <div id="image-modal" class="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md hidden flex flex-col items-center justify-center p-3 sm:p-6" onclick="closeImageModal()">
+    <div class="relative max-w-4xl max-h-[92vh] flex flex-col items-center" onclick="event.stopPropagation()">
+      <button onclick="closeImageModal()" class="absolute -top-10 right-0 text-white hover:text-slate-300 p-1.5 bg-white/10 rounded-full transition">
+        <i data-lucide="x" class="w-5 h-5"></i>
+      </button>
+      <img id="image-modal-img" src="" alt="Clinical & Diagnostic Image" class="max-h-[78vh] max-w-full rounded-2xl object-contain shadow-2xl border border-white/20 bg-white">
+      <div id="image-modal-caption" class="text-xs sm:text-sm text-slate-200 mt-2.5 text-center font-medium max-w-xl"></div>
+    </div>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- FLOATING ACTION BUTTON (EXPANDABLE: DUE REVIEWS, STREAK, STORAGE & BACKUP) -->
+  <!-- ========================================================================= -->
+  <div id="fab-container" class="fixed bottom-5 right-5 z-40 flex flex-col items-end">
+    
+    <!-- Expanded Popover Menu Card -->
+    <div id="fab-menu-popover" class="hidden mb-3 w-72 sm:w-80 bg-white/95 backdrop-blur-md border border-slate-200/90 rounded-2xl shadow-2xl p-4 space-y-3 animate-fade-in text-slate-800">
+      
+      <!-- Popover Header -->
+      <div class="flex items-center justify-between pb-2 border-b border-slate-100">
+        <div class="flex items-center space-x-2">
+          <div class="w-6 h-6 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-xs">
+            <i data-lucide="sliders" class="w-3.5 h-3.5"></i>
+          </div>
+          <span class="text-xs font-bold uppercase tracking-wider text-slate-700">Quick Actions</span>
+        </div>
+        <button onclick="toggleFabMenu()" class="text-slate-400 hover:text-slate-600 p-1 rounded-md transition" title="Close Menu">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+      <!-- Spaced Repetition Due Card -->
+      <div class="bg-gradient-to-r from-rose-50 to-pink-50 border border-rose-200/70 rounded-xl p-3 flex items-center justify-between">
+        <div class="flex items-center space-x-2.5">
+          <div class="w-9 h-9 rounded-xl bg-rose-500 text-white flex items-center justify-center shadow-md shadow-rose-500/20 shrink-0">
+            <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+          </div>
+          <div>
+            <div class="text-[11px] font-bold text-rose-900 uppercase tracking-wide">Daily Spaced Review</div>
+            <div class="text-xs text-rose-700 font-medium"><span id="fab-due-count" class="font-bold text-rose-950 text-sm">0</span> cards due for review</div>
+          </div>
+        </div>
+        <button onclick="switchView('srs'); toggleFabMenu();" class="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white font-bold text-xs rounded-lg shadow-sm transition shrink-0">
+          Review
+        </button>
+      </div>
+
+      <!-- Study Streak Badge -->
+      <div class="bg-amber-50 border border-amber-200/70 rounded-xl p-2.5 flex items-center justify-between text-xs">
+        <div class="flex items-center space-x-2">
+          <i data-lucide="flame" class="w-4 h-4 text-amber-500 fill-amber-500"></i>
+          <span class="font-bold text-amber-900">Current Study Streak</span>
+        </div>
+        <span id="fab-streak-count" class="font-extrabold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-md">1 Day Streak</span>
+      </div>
+
+      <!-- Device Storage & Backup Button -->
+      <button onclick="toggleSyncModal(); toggleFabMenu();" class="w-full py-2.5 px-3 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-800 font-semibold rounded-xl text-xs flex items-center justify-between transition group">
+        <div class="flex items-center space-x-2.5">
+          <div class="w-7 h-7 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center group-hover:bg-indigo-600 group-hover:text-white transition shrink-0">
+            <i data-lucide="cloud-sync" class="w-4 h-4"></i>
+          </div>
+          <div class="text-left">
+            <div class="font-bold text-slate-900 text-xs">Device Storage & Backup</div>
+            <div class="text-[10px] text-slate-500">Export / import progress backup JSON</div>
+          </div>
+        </div>
+        <i data-lucide="chevron-right" class="w-4 h-4 text-slate-400 group-hover:text-slate-700 transition"></i>
+      </button>
+
+    </div>
+
+    <!-- Floating Action Button Trigger -->
+    <button id="btn-fab-trigger" onclick="toggleFabMenu()" aria-label="Quick Actions & Due Reviews" class="w-12 h-12 rounded-full bg-slate-900 hover:bg-slate-800 active:scale-95 text-white shadow-2xl flex items-center justify-center transition border border-slate-700/60 relative focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+      <i id="fab-icon" data-lucide="sliders" class="w-5 h-5"></i>
+      <span id="fab-due-badge" class="hidden absolute -top-1 -right-1 bg-rose-500 text-white text-[10px] w-5 h-5 rounded-full font-black flex items-center justify-center shadow-lg border-2 border-white">0</span>
+    </button>
+  </div>
+
   <!-- DATA & APP LOGIC SCRIPTS -->
   <script src="data.js"></script>
+  <script src="data2.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
