@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>MedAide — NEET PG & INI-CET All 19 Subjects Preparation Aide</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <link rel="stylesheet" href="style.css">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#eef2ff',
+              100: '#e0e7ff',
+              500: '#6366f1',
+              600: '#4f46e5',
+              700: '#4338ca',
+              900: '#312e81',
+            }
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col font-sans antialiased selection:bg-indigo-100 selection:text-indigo-800">
+
+  <!-- TOP HEADER BAR -->
+  <header class="sticky top-0 z-30 bg-white/95 backdrop-blur border-b border-slate-200 px-3 py-2.5 sm:px-6 shadow-sm">
+    <div class="max-w-7xl mx-auto flex items-center justify-between gap-2">
+      
+      <!-- Brand & Title -->
+      <div class="flex items-center space-x-2.5 sm:space-x-3 cursor-pointer shrink-0" onclick="goToHome()">
+        <div class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-brand-600 to-indigo-500 text-white flex items-center justify-center shadow-md shadow-brand-500/20">
+          <i data-lucide="activity" class="w-5 h-5"></i>
+        </div>
+        <div>
+          <div class="flex items-center space-x-1.5 sm:space-x-2">
+            <h1 class="text-base sm:text-lg font-bold text-slate-900 tracking-tight">MedAide</h1>
+            <span class="bg-indigo-100 text-indigo-700 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">19 Subjects</span>
+          </div>
+          <p class="text-[11px] text-slate-500 hidden sm:block">NEET PG & INI-CET Preparation Suite</p>
+        </div>
+      </div>
+
+      <!-- Center: PYQ vs All Questions Toggle Switch -->
+      <div class="flex items-center">
+        <div class="inline-flex items-center bg-slate-100 p-0.5 sm:p-1 rounded-xl border border-slate-200 text-[11px] sm:text-xs font-semibold shadow-inner">
+          <button id="toggle-filter-all" onclick="setQuestionFilter('ALL')" class="px-2 sm:px-3 py-1 rounded-lg transition bg-white shadow-sm text-brand-700 font-bold flex items-center space-x-1">
+            <span>🌐 All Qs</span>
+            <span id="badge-count-all" class="text-[10px] bg-brand-50 text-brand-600 px-1 py-0.2 rounded font-normal hidden sm:inline">1,477</span>
+          </button>
+          <button id="toggle-filter-pyq" onclick="setQuestionFilter('PYQ')" class="px-2 sm:px-3 py-1 rounded-lg transition text-slate-500 hover:text-slate-800 flex items-center space-x-1">
+            <span>📌 PYQs Only</span>
+            <span id="badge-count-pyq" class="text-[10px] bg-slate-200 text-slate-600 px-1 py-0.2 rounded font-normal hidden sm:inline">2013-2026</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Right Header Actions: Streak, Due, Backup -->
+      <div class="flex items-center space-x-1.5 sm:space-x-2.5">
+        <div class="hidden md:flex items-center space-x-1.5 bg-amber-50 border border-amber-200 text-amber-800 px-2.5 py-1 rounded-lg text-xs font-semibold">
+          <i data-lucide="flame" class="w-4 h-4 text-amber-500 fill-amber-500"></i>
+          <span><b id="stat-streak">1</b> d</span>
+        </div>
+        <div class="flex items-center space-x-1 bg-rose-50 border border-rose-200 text-rose-800 px-2.5 py-1 rounded-lg text-xs font-semibold cursor-pointer hover:bg-rose-100 transition" onclick="switchView('srs')" title="Daily Spaced Review">
+          <i data-lucide="refresh-cw" class="w-3.5 h-3.5 text-rose-500"></i>
+          <span>Due: <b id="stat-due">0</b></span>
+        </div>
+        <button onclick="toggleSyncModal()" title="Sync or Backup Progress" class="p-1.5 sm:p-2 border border-slate-200 text-slate-600 hover:text-slate-900 rounded-lg hover:bg-slate-50 transition">
+          <i data-lucide="cloud-sync" class="w-4 h-4"></i>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- GLOBAL NAVIGATION TABS (ALL 6 HUBS) -->
+  <nav class="bg-white border-b border-slate-200 px-3 sm:px-6 overflow-x-auto">
+    <div class="max-w-7xl mx-auto flex space-x-1 sm:space-x-6 text-xs sm:text-sm font-medium whitespace-nowrap">
+      <button onclick="goToHome()" id="tab-home" class="nav-tab active-tab py-2.5 sm:py-3 border-b-2 flex items-center space-x-1.5 sm:space-x-2">
+        <i data-lucide="grid" class="w-4 h-4"></i>
+        <span>19 Subjects</span>
+      </button>
+      <button onclick="switchView('grand-test')" id="tab-grand-test" class="nav-tab py-2.5 sm:py-3 border-b-2 flex items-center space-x-1.5 sm:space-x-2 text-slate-500 hover:text-slate-900">
+        <i data-lucide="award" class="w-4 h-4 text-indigo-500"></i>
+        <span>Grand Test (GT)</span>
+      </button>
+      <button onclick="switchView('rapid-fire')" id="tab-rapid-fire" class="nav-tab py-2.5 sm:py-3 border-b-2 flex items-center space-x-1.5 sm:space-x-2 text-slate-500 hover:text-slate-900">
+        <i data-lucide="flame" class="w-4 h-4 text-amber-500"></i>
+        <span>Rapid Fire Drill</span>
+      </button>
+      <button onclick="switchView('theory')" id="tab-theory" class="nav-tab py-2.5 sm:py-3 border-b-2 flex items-center space-x-1.5 sm:space-x-2 text-slate-500 hover:text-slate-900">
+        <i data-lucide="zap" class="w-4 h-4 text-amber-500 fill-amber-500"></i>
+        <span>Quick Theory</span>
+      </button>
+      <button onclick="switchView('srs')" id="tab-srs" class="nav-tab py-2.5 sm:py-3 border-b-2 flex items-center space-x-1.5 sm:space-x-2 text-slate-500 hover:text-slate-900">
+        <i data-lucide="calendar-clock" class="w-4 h-4 text-rose-500"></i>
+        <span>Spaced Review</span>
+        <span id="badge-due" class="hidden ml-1 bg-rose-500 text-white text-[10px] px-1.5 py-0.2 rounded-full font-bold">0</span>
+      </button>
+      <button onclick="switchView('notebook')" id="tab-notebook" class="nav-tab py-2.5 sm:py-3 border-b-2 flex items-center space-x-1.5 sm:space-x-2 text-slate-500 hover:text-slate-900">
+        <i data-lucide="book-marked" class="w-4 h-4 text-violet-500"></i>
+        <span>20th Notebook (Mistakes)</span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- MAIN CONTAINER -->
+  <main class="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-6">
+
+    <!-- ========================================================================= -->
+    <!-- VIEW 1: MAIN HOMEPAGE (ALL 19 SUBJECTS DIRECTORY) -->
+    <!-- ========================================================================= -->
+    <section id="view-home" class="space-y-6">
+      
+      <!-- Hero Banner -->
+      <div class="bg-gradient-to-r from-slate-900 via-indigo-950 to-brand-950 rounded-2xl p-5 sm:p-8 text-white shadow-xl relative overflow-hidden">
+        <div class="absolute -right-8 -bottom-8 w-60 h-60 bg-brand-500/10 rounded-full blur-3xl"></div>
+        <div class="relative z-10 max-w-3xl">
+          <div class="inline-flex items-center space-x-1.5 bg-white/10 px-3 py-1 rounded-full text-xs font-semibold mb-3">
+            <i data-lucide="sparkles" class="w-3.5 h-3.5 text-amber-300"></i>
+            <span>Complete 19-Subject Curriculum • NEET PG & INI-CET</span>
+          </div>
+          <h2 class="text-xl sm:text-3xl font-extrabold tracking-tight mb-2">NEET PG Preparation Hub</h2>
+          <p class="text-slate-300 text-xs sm:text-sm leading-relaxed mb-4">
+            Study high-yield clustered units with Professor Zach Murphy's framework for Pharmacology, full organ-system coverage for Medicine and Surgery, diagnostic recall tests, and persistent spaced repetition.
+          </p>
+
+          <!-- Action Buttons in Hero -->
+          <div class="flex flex-wrap items-center gap-2.5 text-xs">
+            <button onclick="startRapidFireModal()" class="px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-bold rounded-xl shadow-md transition flex items-center space-x-1.5">
+              <i data-lucide="zap" class="w-4 h-4 fill-slate-950"></i>
+              <span>Rapid Fire (All 19 Subjects)</span>
+            </button>
+            <button onclick="switchView('grand-test')" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-md transition flex items-center space-x-1.5">
+              <i data-lucide="award" class="w-4 h-4"></i>
+              <span>Take Grand Test (GT)</span>
+            </button>
+            <button onclick="switchView('theory')" class="px-3.5 py-2 bg-white/10 hover:bg-white/20 text-white font-semibold rounded-xl transition flex items-center space-x-1.5">
+              <i data-lucide="book-open" class="w-4 h-4 text-amber-300"></i>
+              <span>High-Yield Theory Vault</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Subject Category Filter Pills -->
+      <div class="flex items-center justify-between flex-wrap gap-2 pt-1">
+        <div>
+          <h3 class="text-base sm:text-lg font-bold text-slate-900">Explore Subjects</h3>
+          <p class="text-xs text-slate-500">Tap any subject to view its clustered units and high-yield theory</p>
+        </div>
+
+        <div class="flex items-center space-x-1 overflow-x-auto pb-1" id="subject-category-pills">
+          <button onclick="filterSubjectCategory('ALL')" class="cat-pill active-cat px-3 py-1 rounded-lg text-xs font-semibold border transition" data-cat="ALL">All (19)</button>
+          <button onclick="filterSubjectCategory('Pre-Clinical')" class="cat-pill px-3 py-1 rounded-lg text-xs font-semibold border border-slate-200 text-slate-600 hover:bg-slate-100 transition" data-cat="Pre-Clinical">Pre-Clinical (3)</button>
+          <button onclick="filterSubjectCategory('Para-Clinical')" class="cat-pill px-3 py-1 rounded-lg text-xs font-semibold border border-slate-200 text-slate-600 hover:bg-slate-100 transition" data-cat="Para-Clinical">Para-Clinical (4)</button>
+          <button onclick="filterSubjectCategory('Clinical-Major')" class="cat-pill px-3 py-1 rounded-lg text-xs font-semibold border border-slate-200 text-slate-600 hover:bg-slate-100 transition" data-cat="Clinical-Major">Clinical Major (3)</button>
+          <button onclick="filterSubjectCategory('Clinical-Minor')" class="cat-pill px-3 py-1 rounded-lg text-xs font-semibold border border-slate-200 text-slate-600 hover:bg-slate-100 transition" data-cat="Clinical-Minor">Clinical Minor (9)</button>
+        </div>
+      </div>
+
+      <!-- Subjects Grid (All 19 Subjects) -->
+      <div id="subjects-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        <!-- Injected via JavaScript -->
+      </div>
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- VIEW 2: SUBJECT SUBSECTION (E.G. PHARMACOLOGY / MEDICINE UNITS) -->
+    <!-- ========================================================================= -->
+    <section id="view-subject" class="hidden space-y-6">
+      
+      <!-- Breadcrumb & Subject Header -->
+      <div class="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 shadow-sm flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <div class="flex items-center space-x-2 text-xs font-semibold text-slate-500 mb-2">
+            <button onclick="goToHome()" class="hover:text-brand-600 flex items-center space-x-1">
+              <i data-lucide="arrow-left" class="w-3.5 h-3.5"></i>
+              <span>All Subjects</span>
+            </button>
+            <span>/</span>
+            <span id="subject-breadcrumb-name" class="text-slate-900">Pharmacology</span>
+          </div>
+          <div class="flex items-center space-x-2.5">
+            <h3 id="subject-page-title" class="text-xl sm:text-2xl font-bold text-slate-900">Pharmacology</h3>
+            <span id="subject-page-badge" class="bg-indigo-50 text-indigo-700 text-xs font-bold px-2.5 py-0.5 rounded-full">Zach's Units</span>
+          </div>
+          <p id="subject-page-desc" class="text-xs text-slate-500 mt-1 max-w-xl">
+            Clustered according to high-yield clinical physiology framework.
+          </p>
+        </div>
+
+        <div class="flex items-center space-x-2 flex-wrap gap-2">
+          <button onclick="startSubjectRapidFire()" class="px-3.5 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-sm">
+            <i data-lucide="zap" class="w-3.5 h-3.5 fill-slate-950"></i>
+            <span>Rapid Fire Drill</span>
+          </button>
+          <button onclick="openSubjectTheory()" class="px-3.5 py-2 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-sm">
+            <i data-lucide="book-open" class="w-3.5 h-3.5 text-amber-500"></i>
+            <span>Subject Theory</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Subject Units List Header -->
+      <div class="flex items-center justify-between">
+        <div>
+          <h4 class="text-base font-bold text-slate-900">Clustered Units</h4>
+          <p class="text-xs text-slate-500">Study quick high-yield theory or launch targeted unit tests</p>
+        </div>
+      </div>
+
+      <!-- Units Grid within Subject -->
+      <div id="subject-units-grid" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <!-- Injected via JavaScript -->
+      </div>
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- VIEW 3: GRAND TEST (GT) SIMULATION HUB -->
+    <!-- ========================================================================= -->
+    <section id="view-grand-test" class="hidden space-y-6">
+      
+      <!-- GT Header Banner -->
+      <div class="bg-gradient-to-r from-indigo-900 via-brand-900 to-slate-900 rounded-2xl p-6 text-white shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <div class="inline-flex items-center space-x-1.5 bg-white/10 px-3 py-1 rounded-full text-xs font-semibold mb-2">
+            <i data-lucide="award" class="w-3.5 h-3.5 text-amber-300"></i>
+            <span>Real Exam Simulation</span>
+          </div>
+          <h3 class="text-2xl font-black tracking-tight">Grand Test (GT) Arena</h3>
+          <p class="text-xs sm:text-sm text-indigo-200 mt-1 max-w-xl">
+            Simulate real exam pressure with exact timing, +4/-1 or +1/-0.33 marking schemes, interactive 200-question palette, and subject-wise score analytics.
+          </p>
+        </div>
+
+        <div class="flex items-center space-x-2">
+          <span class="bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 text-xs px-3 py-1.5 rounded-xl font-bold flex items-center space-x-1.5">
+            <i data-lucide="check-circle" class="w-4 h-4"></i>
+            <span>Mistakes feed to 20th Notebook</span>
+          </span>
+        </div>
+      </div>
+
+      <!-- GT Mode Selector Cards -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        
+        <!-- Option 1: NEET PG Full GT -->
+        <div class="bg-white border-2 border-indigo-200 hover:border-brand-500 rounded-2xl p-5 shadow-sm hover:shadow-md transition flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between mb-3">
+              <span class="bg-indigo-100 text-indigo-800 text-xs font-bold px-2.5 py-0.5 rounded-md">NEET PG Full</span>
+              <span class="text-xs font-bold text-indigo-600">800 Marks</span>
+            </div>
+            <h4 class="text-base font-bold text-slate-900 mb-1">NEET PG Full Grand Test</h4>
+            <p class="text-xs text-slate-500 mb-4">200 High-Yield MCQs across all 19 subjects with authentic timing and marking scheme.</p>
+            
+            <div class="space-y-1.5 text-xs text-slate-600 mb-5">
+              <div class="flex items-center justify-between"><span>Questions:</span> <b class="text-slate-900">200 MCQs</b></div>
+              <div class="flex items-center justify-between"><span>Duration:</span> <b class="text-slate-900">210 Mins (3h 30m)</b></div>
+              <div class="flex items-center justify-between"><span>Marking:</span> <b class="text-emerald-600">+4 / -1</b></div>
+            </div>
+          </div>
+
+          <button onclick="startGrandTest('NEET_PG_FULL')" class="w-full py-2.5 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-bold shadow-md shadow-brand-500/20 transition flex items-center justify-center space-x-1.5">
+            <i data-lucide="play" class="w-4 h-4"></i>
+            <span>Start Full GT</span>
+          </button>
+        </div>
+
+        <!-- Option 2: NEET PG Mini GT -->
+        <div class="bg-white border border-slate-200 hover:border-brand-500 rounded-2xl p-5 shadow-sm hover:shadow-md transition flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between mb-3">
+              <span class="bg-sky-100 text-sky-800 text-xs font-bold px-2.5 py-0.5 rounded-md">NEET PG Mini</span>
+              <span class="text-xs font-bold text-sky-600">200 Marks</span>
+            </div>
+            <h4 class="text-base font-bold text-slate-900 mb-1">NEET PG Mini-GT (Sprint)</h4>
+            <p class="text-xs text-slate-500 mb-4">50 Balanced MCQs for a quick daily diagnostic workout before starting study sessions.</p>
+            
+            <div class="space-y-1.5 text-xs text-slate-600 mb-5">
+              <div class="flex items-center justify-between"><span>Questions:</span> <b class="text-slate-900">50 MCQs</b></div>
+              <div class="flex items-center justify-between"><span>Duration:</span> <b class="text-slate-900">50 Mins</b></div>
+              <div class="flex items-center justify-between"><span>Marking:</span> <b class="text-emerald-600">+4 / -1</b></div>
+            </div>
+          </div>
+
+          <button onclick="startGrandTest('NEET_PG_MINI')" class="w-full py-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-bold shadow-md shadow-sky-500/20 transition flex items-center justify-center space-x-1.5">
+            <i data-lucide="play" class="w-4 h-4"></i>
+            <span>Start Mini GT</span>
+          </button>
+        </div>
+
+        <!-- Option 3: INI-CET Full GT -->
+        <div class="bg-white border-2 border-violet-200 hover:border-brand-500 rounded-2xl p-5 shadow-sm hover:shadow-md transition flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between mb-3">
+              <span class="bg-violet-100 text-violet-800 text-xs font-bold px-2.5 py-0.5 rounded-md">INI-CET Full</span>
+              <span class="text-xs font-bold text-violet-600">200 Marks</span>
+            </div>
+            <h4 class="text-base font-bold text-slate-900 mb-1">INI-CET Full Grand Test</h4>
+            <p class="text-xs text-slate-500 mb-4">200 Advanced clinical integration MCQs with authentic 1/3rd negative marking.</p>
+            
+            <div class="space-y-1.5 text-xs text-slate-600 mb-5">
+              <div class="flex items-center justify-between"><span>Questions:</span> <b class="text-slate-900">200 MCQs</b></div>
+              <div class="flex items-center justify-between"><span>Duration:</span> <b class="text-slate-900">180 Mins (3 Hours)</b></div>
+              <div class="flex items-center justify-between"><span>Marking:</span> <b class="text-emerald-600">+1 / -0.33</b></div>
+            </div>
+          </div>
+
+          <button onclick="startGrandTest('INICET_FULL')" class="w-full py-2.5 bg-violet-600 hover:bg-violet-700 text-white rounded-xl text-xs font-bold shadow-md shadow-violet-500/20 transition flex items-center justify-center space-x-1.5">
+            <i data-lucide="play" class="w-4 h-4"></i>
+            <span>Start INI-CET GT</span>
+          </button>
+        </div>
+
+        <!-- Option 4: INI-CET Mini GT -->
+        <div class="bg-white border border-slate-200 hover:border-brand-500 rounded-2xl p-5 shadow-sm hover:shadow-md transition flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between mb-3">
+              <span class="bg-purple-100 text-purple-800 text-xs font-bold px-2.5 py-0.5 rounded-md">INI-CET Mini</span>
+              <span class="text-xs font-bold text-purple-600">50 Marks</span>
+            </div>
+            <h4 class="text-base font-bold text-slate-900 mb-1">INI-CET Mini-GT (Sprint)</h4>
+            <p class="text-xs text-slate-500 mb-4">50 High-yield INI-CET pattern questions with negative marking practice.</p>
+            
+            <div class="space-y-1.5 text-xs text-slate-600 mb-5">
+              <div class="flex items-center justify-between"><span>Questions:</span> <b class="text-slate-900">50 MCQs</b></div>
+              <div class="flex items-center justify-between"><span>Duration:</span> <b class="text-slate-900">45 Mins</b></div>
+              <div class="flex items-center justify-between"><span>Marking:</span> <b class="text-emerald-600">+1 / -0.33</b></div>
+            </div>
+          </div>
+
+          <button onclick="startGrandTest('INICET_MINI')" class="w-full py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold shadow-md shadow-purple-500/20 transition flex items-center justify-center space-x-1.5">
+            <i data-lucide="play" class="w-4 h-4"></i>
+            <span>Start Mini GT</span>
+          </button>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- VIEW 4: RAPID FIRE DRILL ARENA -->
+    <!-- ========================================================================= -->
+    <section id="view-rapid-fire" class="hidden space-y-6">
+      <div class="bg-gradient-to-r from-amber-500 via-orange-600 to-rose-600 rounded-2xl p-6 text-white shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <div class="inline-flex items-center space-x-1.5 bg-white/20 px-3 py-1 rounded-full text-xs font-semibold mb-2">
+            <i data-lucide="zap" class="w-3.5 h-3.5 fill-white"></i>
+            <span>Infinite Speed Drill</span>
+          </div>
+          <h3 class="text-2xl font-black tracking-tight">Rapid Fire Drill Arena</h3>
+          <p class="text-xs sm:text-sm text-amber-100 mt-1 max-w-xl">
+            Questions keep appearing in randomized order until you choose to quit or run through the question bank. Perfect for building speed and instant recall.
+          </p>
+        </div>
+
+        <!-- Quick Launch Global Drill -->
+        <div class="flex items-center space-x-3">
+          <button onclick="launchRapidFire('GLOBAL')" class="px-5 py-2.5 bg-white text-orange-600 hover:bg-orange-50 font-bold rounded-xl text-xs sm:text-sm shadow-md transition flex items-center space-x-2">
+            <i data-lucide="play" class="w-4 h-4 fill-orange-600"></i>
+            <span>Start Global Rapid Fire</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Scope Selector Grid -->
+      <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4">
+        <h4 class="text-sm font-bold text-slate-900 uppercase tracking-wider text-slate-400">Choose Rapid Fire Scope</h4>
+        
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <!-- Global -->
+          <div onclick="launchRapidFire('GLOBAL')" class="border border-slate-200 hover:border-amber-500 rounded-xl p-4 cursor-pointer hover:bg-amber-50/50 transition flex items-center space-x-3">
+            <div class="w-10 h-10 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center font-bold">
+              <i data-lucide="globe" class="w-5 h-5"></i>
+            </div>
+            <div>
+              <h5 class="text-sm font-bold text-slate-900">Global (All 19 Subjects)</h5>
+              <p class="text-xs text-slate-500">Shuffles all questions across entire bank</p>
+            </div>
+          </div>
+
+          <!-- Pre & Para Clinical -->
+          <div onclick="launchRapidFire('PRE_PARA')" class="border border-slate-200 hover:border-amber-500 rounded-xl p-4 cursor-pointer hover:bg-amber-50/50 transition flex items-center space-x-3">
+            <div class="w-10 h-10 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold">
+              <i data-lucide="flask-conical" class="w-5 h-5"></i>
+            </div>
+            <div>
+              <h5 class="text-sm font-bold text-slate-900">Pre & Para-Clinical (7 Subjects)</h5>
+              <p class="text-xs text-slate-500">Anatomy, Phys, Bio, Pharm, Path, Micro, FMT</p>
+            </div>
+          </div>
+
+          <!-- Clinical Full -->
+          <div onclick="launchRapidFire('CLINICAL')" class="border border-slate-200 hover:border-amber-500 rounded-xl p-4 cursor-pointer hover:bg-amber-50/50 transition flex items-center space-x-3">
+            <div class="w-10 h-10 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold">
+              <i data-lucide="stethoscope" class="w-5 h-5"></i>
+            </div>
+            <div>
+              <h5 class="text-sm font-bold text-slate-900">Clinical Specialties (12 Subjects)</h5>
+              <p class="text-xs text-slate-500">Medicine, Surgery, OBGY, Peds, Ortho, Derm, etc.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- VIEW 5: QUICK HIGH-YIELD THEORY (GLOBAL VAULT) -->
+    <!-- ========================================================================= -->
+    <section id="view-theory" class="hidden space-y-6">
+      <div class="bg-gradient-to-r from-amber-500 via-indigo-600 to-brand-700 rounded-2xl p-6 text-white shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <div class="inline-flex items-center space-x-1.5 bg-white/15 px-2.5 py-1 rounded-full text-xs font-semibold mb-2">
+            <i data-lucide="zap" class="w-3.5 h-3.5 text-amber-300"></i>
+            <span>High-Yield Theory Vault</span>
+          </div>
+          <h3 class="text-xl sm:text-2xl font-black tracking-tight">Quick High-Yield Theory Summary</h3>
+          <p class="text-xs sm:text-sm text-indigo-100 mt-1 max-w-xl">
+            Browse concise mechanism summaries, drug-of-choice comparison tables, and 20th-notebook mnemonics across all 19 subjects.
+          </p>
+        </div>
+
+        <!-- Search Bar -->
+        <div class="w-full md:w-72">
+          <div class="relative">
+            <input type="text" id="theory-search" oninput="filterTheorySearch()" placeholder="Search drugs, signs, tables..." class="w-full bg-white text-slate-800 placeholder-slate-400 text-xs sm:text-sm px-3.5 py-2.5 pl-9 rounded-xl border-0 focus:ring-2 focus:ring-amber-300 shadow-sm">
+            <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-3"></i>
+          </div>
+        </div>
+      </div>
+
+      <!-- Subject & Unit Filter Pills -->
+      <div class="flex items-center space-x-2 overflow-x-auto pb-1" id="theory-filter-pills">
+        <!-- Injected via JavaScript -->
+      </div>
+
+      <!-- Theory Content Cards Container -->
+      <div id="theory-vault-container" class="space-y-6">
+        <!-- Injected via JavaScript -->
+      </div>
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- VIEW 6: LIVE TEST & RAPID FIRE RUNNER SCREEN -->
+    <!-- ========================================================================= -->
+    <section id="view-quiz" class="hidden space-y-4">
+      
+      <!-- Top Quiz Bar -->
+      <div class="bg-white border border-slate-200 rounded-xl p-3 sm:p-4 shadow-sm flex items-center justify-between gap-2">
+        <div class="flex items-center space-x-2 min-w-0">
+          <button onclick="confirmExitQuiz()" class="text-slate-400 hover:text-slate-700 p-1 rounded-lg hover:bg-slate-100 transition shrink-0">
+            <i data-lucide="arrow-left" class="w-5 h-5"></i>
+          </button>
+          <div class="min-w-0">
+            <h3 id="quiz-unit-title" class="font-bold text-slate-900 text-xs sm:text-sm truncate">Test Arena</h3>
+            <p id="quiz-unit-subtitle" class="text-[11px] text-slate-500 truncate">Recall Mode</p>
+          </div>
+        </div>
+
+        <!-- Timer, Palette Button, and Counter -->
+        <div class="flex items-center space-x-2 sm:space-x-3 shrink-0 text-xs font-semibold">
+          <button id="btn-open-palette" onclick="togglePaletteModal()" class="hidden px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold flex items-center space-x-1">
+            <i data-lucide="grid" class="w-3.5 h-3.5"></i>
+            <span>Palette</span>
+          </button>
+          <span class="bg-indigo-50 text-indigo-700 px-2 sm:px-2.5 py-1 rounded-lg" id="quiz-counter">Q 1/20</span>
+          <span id="timer-box" class="text-slate-700 bg-slate-100 px-2 sm:px-2.5 py-1 rounded-lg flex items-center space-x-1">
+            <i data-lucide="clock" class="w-3.5 h-3.5 text-slate-500"></i>
+            <span id="quiz-timer">00:00</span>
+          </span>
+        </div>
+      </div>
+
+      <!-- Rapid Fire Header Bar (Shown only during Rapid Fire) -->
+      <div id="rf-stats-bar" class="hidden bg-amber-50 border border-amber-200 rounded-xl px-4 py-2 flex items-center justify-between text-xs font-semibold text-amber-900">
+        <div class="flex items-center space-x-3">
+          <span>Drill Streak: <b id="rf-streak" class="text-amber-600">0</b> 🔥</span>
+          <span>Accuracy: <b id="rf-accuracy" class="text-emerald-700">100%</b></span>
+        </div>
+        <div class="flex items-center space-x-2">
+          <label class="flex items-center space-x-1 cursor-pointer">
+            <input type="checkbox" id="rf-instant-toggle" onchange="toggleRfInstant()" class="rounded text-amber-600" checked>
+            <span class="text-[11px]">Instant Reveal</span>
+          </label>
+          <button onclick="finishRapidFire()" class="px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[11px] font-bold">End Drill</button>
+        </div>
+      </div>
+
+      <!-- Main Question Card Layout (Splits into Question + Palette for Grand Test on large screens) -->
+      <div class="grid grid-cols-1 lg:grid-cols-4 gap-4">
+        
+        <!-- Left: Question & Options (col-span-3 in GT, col-span-4 in Unit Quiz) -->
+        <div id="quiz-left-column" class="lg:col-span-4 bg-white border border-slate-200 rounded-2xl p-5 sm:p-7 shadow-sm space-y-5">
+          
+          <div class="flex items-center justify-between flex-wrap gap-2">
+            <div class="flex items-center space-x-2">
+              <span id="quiz-source-badge" class="bg-amber-100 text-amber-800 text-[11px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider">NEET PG 2024</span>
+              <span id="quiz-subject-badge" class="bg-indigo-50 text-indigo-700 text-[11px] font-bold px-2.5 py-0.5 rounded-full">Pharmacology</span>
+            </div>
+            <span id="quiz-topic-tag" class="text-xs text-slate-400 font-medium">Topic Tag</span>
+          </div>
+
+          <h4 id="quiz-question-text" class="text-sm sm:text-base font-medium text-slate-900 leading-relaxed">
+            Loading question text...
+          </h4>
+
+          <!-- Options Container -->
+          <div id="quiz-options-container" class="space-y-2.5">
+            <!-- Injected via JavaScript -->
+          </div>
+
+          <!-- Instant Feedback Container (For Rapid Fire instant reveal) -->
+          <div id="rf-instant-feedback" class="hidden p-4 rounded-xl border text-xs space-y-1.5 animate-fade-in">
+            <!-- Injected via JavaScript -->
+          </div>
+
+          <!-- Navigation & Action Buttons -->
+          <div class="pt-4 border-t border-slate-100 flex items-center justify-between flex-wrap gap-2">
+            <div class="flex items-center space-x-2">
+              <button id="btn-prev-q" onclick="prevQuestion()" class="hidden px-3.5 py-2 border border-slate-200 text-slate-700 rounded-xl text-xs font-semibold hover:bg-slate-50 transition">
+                Previous
+              </button>
+              <button id="btn-mark-review" onclick="toggleMarkForReview()" class="hidden px-3 py-2 border border-purple-200 text-purple-700 hover:bg-purple-50 rounded-xl text-xs font-semibold transition flex items-center space-x-1">
+                <i data-lucide="bookmark" class="w-3.5 h-3.5"></i>
+                <span id="btn-mark-text">Mark for Review</span>
+              </button>
+              <button id="btn-clear-choice" onclick="clearOptionChoice()" class="hidden px-2.5 py-2 text-slate-400 hover:text-slate-600 text-xs">
+                Clear
+              </button>
+            </div>
+
+            <div class="flex items-center space-x-2">
+              <button id="btn-next-q" onclick="nextQuestion()" class="px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-semibold shadow-md shadow-brand-500/20 transition flex items-center space-x-1.5">
+                <span>Next</span>
+                <i data-lucide="chevron-right" class="w-4 h-4"></i>
+              </button>
+              <button id="btn-submit-q" onclick="submitQuiz()" class="hidden px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-md shadow-emerald-500/20 transition flex items-center space-x-1.5">
+                <span>Finish & View Theory</span>
+                <i data-lucide="check" class="w-4 h-4"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: Question Palette (Visible during Grand Test on Desktop) -->
+        <div id="gt-palette-column" class="hidden lg:col-span-1 bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex flex-col h-[520px]">
+          <h4 class="text-xs font-bold text-slate-900 uppercase tracking-wider mb-2 flex items-center justify-between">
+            <span>Question Palette</span>
+            <span id="palette-status-count" class="text-[10px] text-slate-400">0 / 200</span>
+          </h4>
+
+          <!-- Legend -->
+          <div class="grid grid-cols-2 gap-1.5 text-[10px] font-semibold text-slate-500 pb-2 border-b border-slate-100 mb-2">
+            <span class="flex items-center space-x-1"><span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> <span>Answered</span></span>
+            <span class="flex items-center space-x-1"><span class="w-2.5 h-2.5 rounded-full bg-purple-500"></span> <span>Review</span></span>
+            <span class="flex items-center space-x-1"><span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span> <span>Ans & Rev</span></span>
+            <span class="flex items-center space-x-1"><span class="w-2.5 h-2.5 rounded-full bg-slate-200"></span> <span>Unvisited</span></span>
+          </div>
+
+          <!-- 200 Question Buttons Grid -->
+          <div id="gt-palette-grid" class="flex-1 overflow-y-auto grid grid-cols-5 gap-1.5 p-1 content-start">
+            <!-- Injected via JavaScript -->
+          </div>
+
+          <button onclick="submitGrandTestConfirm()" class="mt-2 w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition shadow-sm">
+            Submit Grand Test
+          </button>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- VIEW 7: POST-TEST RESULTS & REVIEW -->
+    <!-- ========================================================================= -->
+    <section id="view-post-test" class="hidden space-y-6">
+      
+      <!-- Score Banner -->
+      <div class="bg-white border border-slate-200 rounded-2xl p-5 sm:p-7 shadow-sm flex flex-col md:flex-row items-center justify-between gap-6">
+        <div class="flex items-center space-x-5">
+          <div id="score-ring" class="w-20 h-20 rounded-2xl bg-indigo-50 border-4 border-indigo-600 flex flex-col items-center justify-center text-indigo-700 shrink-0">
+            <span id="score-percent" class="text-2xl font-black">75%</span>
+            <span id="score-percent-label" class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Score</span>
+          </div>
+          <div>
+            <div class="flex items-center space-x-2">
+              <h3 class="text-lg sm:text-xl font-bold text-slate-900" id="post-title">Test Complete!</h3>
+              <span id="post-badge" class="bg-emerald-100 text-emerald-800 text-xs px-2 py-0.5 rounded-full font-semibold">Great Job!</span>
+            </div>
+            <p id="post-summary-text" class="text-xs sm:text-sm text-slate-500 mt-1">Review your results below. All mistakes are automatically registered into your 20th Notebook and Spaced Repetition queue.</p>
+          </div>
+        </div>
+
+        <div class="flex items-center space-x-2.5 w-full md:w-auto">
+          <button onclick="returnToActiveSubject()" class="flex-1 md:flex-none px-4 py-2 border border-slate-200 text-slate-700 hover:bg-slate-50 rounded-xl text-xs font-semibold transition">
+            Back to Units
+          </button>
+          <button onclick="retakeCurrentUnit()" class="flex-1 md:flex-none px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-semibold shadow-md shadow-brand-500/20 transition">
+            Retake Test
+          </button>
+        </div>
+      </div>
+
+      <!-- Grand Test Subject-Wise Breakdown Table (Only shown if Grand Test) -->
+      <div id="gt-breakdown-card" class="hidden bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-3">
+        <div class="flex items-center justify-between">
+          <h4 class="text-sm font-bold text-slate-900 uppercase tracking-wider">Subject-Wise Performance Breakdown (19 Subjects)</h4>
+          <span class="text-xs font-semibold text-slate-500" id="gt-marking-scheme-note">Marking Scheme: +4 / -1</span>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs">
+            <thead class="bg-slate-50 text-slate-500 uppercase tracking-wider text-[10px]">
+              <tr>
+                <th class="py-2 px-3">Subject</th>
+                <th class="py-2 px-3">Total Qs</th>
+                <th class="py-2 px-3">Attempted</th>
+                <th class="py-2 px-3">Correct</th>
+                <th class="py-2 px-3">Incorrect</th>
+                <th class="py-2 px-3">Score</th>
+                <th class="py-2 px-3">Accuracy</th>
+              </tr>
+            </thead>
+            <tbody id="gt-subject-breakdown-body" class="divide-y divide-slate-100 text-slate-700">
+              <!-- Injected via JavaScript -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Quick High-Yield Theory Summary Section -->
+      <div id="post-theory-section" class="bg-gradient-to-br from-indigo-950 via-slate-900 to-indigo-900 rounded-2xl p-5 sm:p-7 text-white shadow-xl space-y-5">
+        <div class="flex items-center justify-between border-b border-white/10 pb-3">
+          <div class="flex items-center space-x-3">
+            <div class="w-8 h-8 rounded-xl bg-amber-400 text-slate-900 flex items-center justify-center font-bold">
+              <i data-lucide="zap" class="w-4 h-4 fill-slate-900"></i>
+            </div>
+            <div>
+              <h4 class="text-base font-bold text-white tracking-tight">Quick High-Yield Theory Summary</h4>
+              <p class="text-xs text-indigo-200">Consolidate these key mechanisms while test questions are fresh in mind</p>
+            </div>
+          </div>
+        </div>
+
+        <p id="theory-summary-text" class="text-xs sm:text-sm text-slate-300 leading-relaxed">
+          Loading high yield theory...
+        </p>
+
+        <!-- Dynamic Tables Container -->
+        <div id="theory-tables-container" class="space-y-4">
+          <!-- Injected via JavaScript -->
+        </div>
+
+        <!-- Dynamic Mnemonics Container -->
+        <div class="bg-white/5 border border-white/10 rounded-xl p-4">
+          <h5 class="text-xs font-bold uppercase tracking-wider text-amber-300 mb-2 flex items-center space-x-1.5">
+            <i data-lucide="lightbulb" class="w-3.5 h-3.5"></i>
+            <span>Essential 20th-Notebook Mnemonics</span>
+          </h5>
+          <ul id="theory-mnemonics-list" class="space-y-2 text-xs text-slate-200">
+            <!-- Injected via JavaScript -->
+          </ul>
+        </div>
+      </div>
+
+      <!-- Item-by-Item Question Breakdown & Explanations -->
+      <div class="space-y-4">
+        <div class="flex items-center justify-between flex-wrap gap-2">
+          <div>
+            <h4 class="text-base font-bold text-slate-900">Detailed Answer Analysis</h4>
+            <p class="text-xs text-slate-500">Full rationales, distractor explanations, and clinical pearls</p>
+          </div>
+          <div class="flex items-center space-x-2 text-xs font-semibold">
+            <span class="inline-flex items-center space-x-1 text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-md"><i data-lucide="check" class="w-3.5 h-3.5"></i> <span id="review-correct-count">0 Correct</span></span>
+            <span class="inline-flex items-center space-x-1 text-rose-700 bg-rose-50 px-2.5 py-1 rounded-md"><i data-lucide="x" class="w-3.5 h-3.5"></i> <span id="review-wrong-count">0 Wrong</span></span>
+          </div>
+        </div>
+
+        <!-- Question Explanations List -->
+        <div id="post-test-questions-list" class="space-y-4">
+          <!-- Injected via JavaScript -->
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- VIEW 8: GLOBAL DAILY SPACED REVISION (SRS WITH PERSISTENT OVERDUE DAYS) -->
+    <!-- ========================================================================= -->
+    <section id="view-srs" class="hidden space-y-6">
+      <div class="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 shadow-sm">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div class="flex items-center space-x-3">
+            <div class="w-10 h-10 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center font-bold">
+              <i data-lucide="calendar-check" class="w-5 h-5"></i>
+            </div>
+            <div>
+              <h3 class="text-base sm:text-lg font-bold text-slate-900">Global Daily Spaced Revision Hub</h3>
+              <p class="text-xs text-slate-500">Missed reviews NEVER disappear. Questions remain as 'Overdue by X days' until you review them.</p>
+            </div>
+          </div>
+          <button id="btn-start-srs-quiz" onclick="startSrsDrill()" class="hidden px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs sm:text-sm font-semibold shadow-md shadow-rose-500/20 transition flex items-center justify-center space-x-2">
+            <i data-lucide="play" class="w-4 h-4"></i>
+            <span>Start Revision Drill</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- SRS Queue List -->
+      <div id="srs-queue-container" class="space-y-3">
+        <!-- Injected via JavaScript -->
+      </div>
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- VIEW 9: GLOBAL 20TH NOTEBOOK (ALL TOPICS MISTAKE VAULT) -->
+    <!-- ========================================================================= -->
+    <section id="view-notebook" class="hidden space-y-6">
+      <div class="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 shadow-sm flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div class="flex items-center space-x-3">
+          <div class="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center font-bold">
+            <i data-lucide="bookmark" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <h3 class="text-base sm:text-lg font-bold text-slate-900">Global 20th Notebook (Mistakes)</h3>
+            <p class="text-xs text-slate-500">Consolidated vault of questions you got wrong across all 19 subjects</p>
+          </div>
+        </div>
+
+        <input type="text" id="notebook-search" oninput="filterNotebook()" placeholder="Search mistakes or drugs..." class="px-3.5 py-2 border border-slate-200 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 w-full sm:w-64">
+      </div>
+
+      <!-- Subject Filter Pills for Notebook -->
+      <div class="flex items-center space-x-1.5 overflow-x-auto pb-1" id="notebook-subject-pills">
+        <!-- Injected via JavaScript -->
+      </div>
+
+      <!-- Notebook Items List -->
+      <div id="notebook-container" class="space-y-4">
+        <!-- Injected via JavaScript -->
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ========================================================================= -->
+  <!-- MODAL 1: PALETTE MODAL (MOBILE FOR GRAND TEST) -->
+  <!-- ========================================================================= -->
+  <div id="palette-modal" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-md w-full p-5 shadow-2xl space-y-4 animate-fade-in max-h-[85vh] flex flex-col">
+      <div class="flex items-center justify-between pb-2 border-b border-slate-100">
+        <h4 class="font-bold text-slate-900 text-sm">Question Palette (1 to 200)</h4>
+        <button onclick="togglePaletteModal()" class="text-slate-400 hover:text-slate-600 p-1">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+      <div class="flex-1 overflow-y-auto grid grid-cols-5 gap-1.5 p-1" id="mobile-palette-grid">
+        <!-- Injected via JS -->
+      </div>
+      <button onclick="togglePaletteModal()" class="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl">
+        Close Palette
+      </button>
+    </div>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- MODAL 2: DATA SYNC & BACKUP -->
+  <!-- ========================================================================= -->
+  <div id="sync-modal" class="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-5 animate-fade-in">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+        <div class="flex items-center space-x-2.5">
+          <i data-lucide="cloud-sync" class="w-5 h-5 text-indigo-600"></i>
+          <h4 class="font-bold text-slate-900">Device Storage & Backup</h4>
+        </div>
+        <button onclick="toggleSyncModal()" class="text-slate-400 hover:text-slate-600 p-1">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="bg-indigo-50 border border-indigo-100 rounded-xl p-3.5 text-xs text-indigo-900 space-y-1.5 leading-relaxed">
+        <p class="font-bold flex items-center space-x-1.5">
+          <i data-lucide="smartphone" class="w-3.5 h-3.5 text-indigo-600"></i>
+          <span>Offline & Mobile Ready:</span>
+        </p>
+        <p>All progress, 20th Notebook mistakes, and Spaced Review intervals are saved in <code class="bg-white px-1 py-0.5 rounded text-[11px]">localStorage</code> right on your phone or tablet. Works completely offline.</p>
+      </div>
+
+      <div class="space-y-2">
+        <label class="block text-xs font-bold uppercase text-slate-500 tracking-wider">Sync Backup Code (Copy / Paste):</label>
+        <textarea id="sync-textarea" rows="3" class="w-full text-xs p-3 font-mono border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="Your progress backup string will appear here..."></textarea>
+      </div>
+
+      <div class="flex space-x-2 pt-2">
+        <button onclick="exportSyncCode()" class="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl text-xs transition shadow-sm">
+          Copy Backup Code
+        </button>
+        <button onclick="importSyncCode()" class="flex-1 py-2.5 border border-slate-200 text-slate-700 hover:bg-slate-50 font-semibold rounded-xl text-xs transition">
+          Restore from Code
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- DATA & APP LOGIC SCRIPTS -->
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
