@@ -2,31 +2,12 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MedAide — NEET PG & INI-CET All 19 Subjects Preparation Aide</title>
-  <!-- Tailwind CSS CDN -->
-  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="tailwind.css?v=20261102a">
   <!-- Lucide Icons -->
-  <script src="https://unpkg.com/lucide@latest"></script>
-  <link rel="stylesheet" href="style.css">
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          colors: {
-            brand: {
-              50: '#eef2ff',
-              100: '#e0e7ff',
-              500: '#6366f1',
-              600: '#4f46e5',
-              700: '#4338ca',
-              900: '#312e81',
-            }
-          }
-        }
-      }
-    }
-  </script>
+  <script src="vendor/lucide.min.js"></script>
+  <link rel="stylesheet" href="style.css?v=20261102a">
 </head>
 <body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col font-sans antialiased selection:bg-indigo-100 selection:text-indigo-800">
 
@@ -121,7 +102,7 @@
           </div>
           <h2 class="text-xl sm:text-3xl font-extrabold tracking-tight mb-2">NEET PG Preparation Hub</h2>
           <p class="text-slate-300 text-xs sm:text-sm leading-relaxed mb-4">
-            Master high-yield clustered clinical units across all 19 medical subjects with diagnostic recall tests, authentic Previous Year Questions, Extreme Mode question pools, and persistent spaced repetition.
+            Master high-yield clustered clinical units across all 19 medical subjects with diagnostic recall tests, recalled Previous Year Questions, Extreme Mode question pools, and persistent spaced repetition.
           </p>
 
           <!-- Action Buttons in Hero -->
@@ -498,7 +479,7 @@
               <span id="quiz-source-badge" class="bg-amber-100 text-amber-800 text-[11px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider">NEET PG 2024</span>
               <span id="quiz-subject-badge" class="bg-indigo-50 text-indigo-700 text-[11px] font-bold px-2.5 py-0.5 rounded-full">Pharmacology</span>
             </div>
-            <span id="quiz-topic-tag" class="text-xs text-slate-400 font-medium">Topic Tag</span>
+            <span class="flex items-center space-x-2"><span id="quiz-topic-tag" class="text-xs text-slate-400 font-medium">Topic Tag</span><button id="btn-report-q" onclick="reportCurrentQuestion()" class="text-[11px] text-slate-400 hover:text-rose-600 underline">Report</button></span>
           </div>
 
           <h4 id="quiz-question-text" class="text-sm sm:text-base font-medium text-slate-900 leading-relaxed">
@@ -896,8 +877,8 @@
   </div>
 
   <!-- DATA & APP LOGIC SCRIPTS -->
-  <script src="data.js"></script>
-  <script src="data2.js"></script>
-  <script src="app.js"></script>
+  <script src="data/index.js?v=20261102a"></script>
+  <script src="app.js?v=20261102a"></script>
+<div id="loading-overlay" class="hidden fixed inset-0 z-[100] bg-slate-900/60 flex items-center justify-center"><div class="bg-white rounded-2xl px-6 py-5 text-sm font-semibold text-slate-700 shadow-xl">Loading questions…</div></div>
 </body>
 </html>

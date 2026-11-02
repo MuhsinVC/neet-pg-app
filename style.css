@@ -57,3 +57,6 @@ details > summary::-webkit-details-marker {
   scrollbar-width: thin;
   scrollbar-color: #cbd5e1 #f1f5f9;
 }
+
+/* Assertion-Reason questions contain line breaks */
+#quiz-question-text, #post-test-questions-list p { white-space: pre-line; }

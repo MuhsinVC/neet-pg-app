@@ -55,6 +55,118 @@ const SUBJECT_CATEGORIES = {
 // -------------------------------------------------------------
 // INITIALIZATION
 // -------------------------------------------------------------
+
+// -------------------------------------------------------------
+// LAZY PER-SUBJECT QUESTION LOADING (home page loads only the index)
+// -------------------------------------------------------------
+const DATA_VERSION = '20261102a';
+const REPO_ISSUES_URL = 'https://github.com/MuhsinVC/neet-pg-app/issues/new';
+const _subjectLoads = {};
+
+window.__qdata = function (subjectId, byUnit) {
+  const s = ((window.CURRICULUM_DATA || {}).subjects || []).find(x => x.subject_id === subjectId);
+  if (!s) return;
+  s.units.forEach(u => { u.questions = byUnit[u.unit_id] || []; });
+  s._loaded = true;
+};
+
+function loadSubjectData(subjectId) {
+  const s = state.curriculum.subjects.find(x => x.subject_id === subjectId);
+  if (!s || s._loaded) return Promise.resolve();
+  if (!_subjectLoads[subjectId]) {
+    _subjectLoads[subjectId] = new Promise((resolve, reject) => {
+      const el = document.createElement('script');
+      el.src = `data/q-${subjectId}.js?v=${DATA_VERSION}`;
+      el.onload = () => resolve();
+      el.onerror = () => { delete _subjectLoads[subjectId]; reject(new Error('load failed: ' + subjectId)); };
+      document.head.appendChild(el);
+    });
+  }
+  return _subjectLoads[subjectId];
+}
+
+async function ensureSubjects(ids) {
+  const pending = ids.filter(id => {
+    const s = state.curriculum.subjects.find(x => x.subject_id === id);
+    return s && !s._loaded;
+  });
+  if (!pending.length) return true;
+  const overlay = document.getElementById('loading-overlay');
+  if (overlay) overlay.classList.remove('hidden');
+  try {
+    await Promise.all(pending.map(loadSubjectData));
+    return true;
+  } catch (e) {
+    alert('Could not download the question data. Please check your internet connection and try again.');
+    return false;
+  } finally {
+    if (overlay) overlay.classList.add('hidden');
+  }
+}
+
+function allSubjectIds() { return state.curriculum.subjects.map(s => s.subject_id); }
+
+function subjectIdOfUnit(unitId) {
+  const s = state.curriculum.subjects.find(x => x.units.some(u => u.unit_id === unitId));
+  return s ? s.subject_id : null;
+}
+
+// Question counts straight from the index (no need to download questions)
+function unitCount(u) {
+  const c = u.counts || { PYQ: 0, PRACTICE: 0, EXTREME: 0 };
+  if (state.questionFilter === 'PYQ') return c.PYQ;
+  if (state.questionFilter === 'EXTREME') return c.EXTREME;
+  return c.PYQ + c.PRACTICE;
+}
+
+function countDueSrs() {
+  const now = Date.now();
+  return Object.values(state.userData.srs).filter(i => now >= new Date(i.nextReviewDate).getTime()).length;
+}
+
+function dueSrsSubjectIds() {
+  const now = Date.now();
+  const ids = new Set();
+  Object.values(state.userData.srs).forEach(i => {
+    if (now >= new Date(i.nextReviewDate).getTime() && i.subjectId) ids.add(i.subjectId);
+  });
+  return [...ids].filter(id => state.curriculum.subjects.some(s => s.subject_id === id));
+}
+
+// -------------------------------------------------------------
+// REPORT A QUESTION (opens a pre-filled GitHub Issue)
+// -------------------------------------------------------------
+function reportQuestion(qId) {
+  const q = findQuestionById(qId)
+    || state.activeQuestions.find(x => x.id === qId)
+    || (state.userData.mistakes[qId] && state.userData.mistakes[qId].q);
+  if (!q) return;
+  const opts = Object.entries(q.options).map(([k, v]) => `${k}. ${v}`).join('\n');
+  const body = [
+    `**Question ID:** ${q.id}`,
+    `**Subject / topic:** ${q.subject_name || ''} / ${q.topic || ''}`,
+    `**Source label:** ${q.exam_source || ''}`,
+    '',
+    '**Question**',
+    q.question,
+    '',
+    '**Options**',
+    opts,
+    '',
+    `**Answer key in the app:** ${q.correct_option}`,
+    '',
+    '**What is wrong?** (wrong answer / unclear wording / typo / wrong image / other)',
+    '',
+  ].join('\n').slice(0, 2500);
+  const url = `${REPO_ISSUES_URL}?title=${encodeURIComponent('Question report: ' + q.id)}&body=${encodeURIComponent(body)}`;
+  window.open(url, '_blank', 'noopener');
+}
+
+function reportCurrentQuestion() {
+  const q = state.activeQuestions[state.currentQIndex];
+  if (q) reportQuestion(q.id);
+}
+
 window.addEventListener('DOMContentLoaded', () => {
   loadUserData();
   if (window.CURRICULUM_DATA) {
@@ -94,7 +206,7 @@ function updateStatsHeader() {
   const statStreak = document.getElementById('stat-streak');
   if (statStreak) statStreak.textContent = streakText;
 
-  const dueList = getDueSrsQuestions();
+  const dueList = { length: countDueSrs() };
   const statDue = document.getElementById('stat-due');
   if (statDue) statDue.textContent = dueList.length;
   
@@ -136,14 +248,10 @@ function updateFilterCounts() {
 
   state.curriculum.subjects.forEach(s => {
     s.units.forEach(u => {
-      u.questions.forEach(q => {
-        if (q.question_type === 'EXTREME') {
-          totalExtreme++;
-        } else {
-          totalAdditional++;
-          if (q.question_type === 'PYQ') totalPyq++;
-        }
-      });
+      const c = u.counts || { PYQ: 0, PRACTICE: 0, EXTREME: 0 };
+      totalExtreme += c.EXTREME;
+      totalAdditional += c.PYQ + c.PRACTICE;
+      totalPyq += c.PYQ;
     });
   });
 
@@ -218,7 +326,7 @@ function switchView(viewName) {
   if (viewName === 'home') renderSubjectsGrid();
   if (viewName === 'subject') renderSubjectUnits();
   if (viewName === 'theory') renderTheoryVault();
-  if (viewName === 'srs') renderSrsView();
+  if (viewName === 'srs') ensureSubjects(dueSrsSubjectIds()).then(renderSrsView);
   if (viewName === 'notebook') renderNotebookView();
 
   window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -264,7 +372,7 @@ function renderSubjectsGrid() {
     // Calculate question count respecting active toggle
     let qCount = 0;
     subj.units.forEach(u => {
-      qCount += getFilteredQuestions(u.questions).length;
+      qCount += unitCount(u);
     });
 
     const isPharm = subj.subject_id === 'PHARMACOLOGY';
@@ -305,9 +413,10 @@ function renderSubjectsGrid() {
   lucide.createIcons();
 }
 
-function openSubject(subjectId) {
+async function openSubject(subjectId) {
   const subj = state.curriculum.subjects.find(s => s.subject_id === subjectId);
   if (!subj) return;
+  if (!(await ensureSubjects([subjectId]))) return;
 
   state.activeSubject = subj;
   document.getElementById('subject-breadcrumb-name').textContent = subj.name;
@@ -421,7 +530,17 @@ function startRapidFireModal() {
   switchView('rapid-fire');
 }
 
-function launchRapidFire(scope, targetId) {
+async function launchRapidFire(scope, targetId) {
+  let ids = allSubjectIds();
+  if (scope === 'PRE_PARA') ids = [...SUBJECT_CATEGORIES['Pre-Clinical'], ...SUBJECT_CATEGORIES['Para-Clinical']];
+  else if (scope === 'CLINICAL') ids = [...SUBJECT_CATEGORIES['Clinical-Major'], ...SUBJECT_CATEGORIES['Clinical-Minor']];
+  else if (scope === 'SUBJECT') ids = [targetId];
+  else if (scope === 'UNIT') { const sid = subjectIdOfUnit(targetId); ids = sid ? [sid] : []; }
+  if (!(await ensureSubjects(ids))) return;
+  launchRapidFireNow(scope, targetId);
+}
+
+function launchRapidFireNow(scope, targetId) {
   state.quizMode = 'RAPID_FIRE';
   state.rfScope = scope;
   state.rfStreak = 0;
@@ -539,7 +658,12 @@ function finishRapidFire() {
 // -------------------------------------------------------------
 // GRAND TEST (GT) SIMULATION ENGINE
 // -------------------------------------------------------------
-function startGrandTest(examType) {
+async function startGrandTest(examType) {
+  if (!(await ensureSubjects(allSubjectIds()))) return;
+  startGrandTestNow(examType);
+}
+
+function startGrandTestNow(examType) {
   state.quizMode = 'GRAND_TEST';
   state.userAnswers = {};
   state.markedForReview = {};
@@ -830,7 +954,13 @@ function renderGrandTestBreakdown(subjectMap) {
 // -------------------------------------------------------------
 // STANDARD UNIT QUIZ FLOW
 // -------------------------------------------------------------
-function startUnitQuiz(unitId) {
+async function startUnitQuiz(unitId) {
+  const sid = subjectIdOfUnit(unitId);
+  if (sid && !(await ensureSubjects([sid]))) return;
+  startUnitQuizNow(unitId);
+}
+
+function startUnitQuizNow(unitId) {
   state.quizMode = 'UNIT';
   let unit = null;
   let subjFound = null;
@@ -1279,6 +1409,7 @@ function renderReviewList(questions) {
       </div>
 
       <p class="text-sm font-semibold text-slate-900 leading-snug">${q.question}</p>
+      <button onclick="reportQuestion('${q.id}')" class="text-[11px] text-slate-400 hover:text-rose-600 underline">Report this question</button>
 
       ${q.image_url ? `
         <div class="my-2.5 inline-block cursor-pointer" onclick="openImageModal('${q.image_url}', '${q.exam_source || 'Clinical Image'} • ${q.topic || ''}')">
@@ -1435,7 +1566,12 @@ function renderSrsView() {
   lucide.createIcons();
 }
 
-function startSrsDrill() {
+async function startSrsDrill() {
+  if (!(await ensureSubjects(dueSrsSubjectIds()))) return;
+  startSrsDrillNow();
+}
+
+function startSrsDrillNow() {
   const due = getDueSrsQuestions();
   if (due.length === 0) return;
 
