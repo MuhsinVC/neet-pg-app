@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 280" width="100%" height="100%">
+  <rect width="600" height="280" fill="#fff1f2" rx="12"/>
+  <!-- ECG Grid Pattern -->
+  <defs>
+    <pattern id="ecg_grid" width="20" height="20" patternUnits="userSpaceOnUse">
+      <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#fecdd3" stroke-width="0.8"/>
+    </pattern>
+  </defs>
+  <rect width="600" height="280" fill="url(#ecg_grid)" rx="12"/>
+  
+  <text x="300" y="28" fill="#9f1239" font-size="15" font-weight="bold" text-anchor="middle" font-family="system-ui">12-Lead ECG Strip: Hyperacute ST Elevation (Tombstoning)</text>
+  <text x="30" y="60" fill="#be123c" font-size="12" font-weight="bold" font-family="system-ui">Lead III / aVF</text>
+  
+  <!-- Hyperacute ST Elevation complexes -->
+  <path d="M 30,170 L 60,170 Q 75,160 85,170 L 95,170 L 100,175 L 105,70 L 115,200 L 120,170 Q 140,70 170,75 L 190,170 L 260,170 Q 275,160 285,170 L 295,170 L 300,175 L 305,70 L 315,200 L 320,170 Q 340,70 370,75 L 390,170 L 460,170 Q 475,160 485,170 L 495,170 L 500,175 L 505,70 L 515,200 L 520,170 Q 540,70 570,75" fill="none" stroke="#be123c" stroke-width="3.5"/>
+  
+  <!-- Tombstone ST label -->
+  <circle cx="155" cy="73" r="6" fill="#e11d48"/>
+  <text x="175" y="55" fill="#e11d48" font-size="11" font-weight="bold" font-family="system-ui">&gt; 5mm Convex ST Elevation ('Tombstone')</text>
+  <line x1="155" y1="73" x2="170" y2="58" stroke="#e11d48" stroke-width="2"/>
+  
+  <!-- Callout -->
+  <rect x="30" y="215" width="540" height="45" fill="#ffffff" stroke="#f43f5e" stroke-width="1.5" rx="8"/>
+  <text x="45" y="234" fill="#881337" font-size="11" font-weight="bold" font-family="system-ui">Diagnosis: Acute Inferior Wall STEMI (Right Coronary Artery / RCA Occlusion)</text>
+  <text x="45" y="250" fill="#4c0519" font-size="10" font-family="system-ui">Key: ST Elevation in II, III, aVF with reciprocal ST depression in Lead I and aVL.</text>
+</svg>

@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 350" width="100%" height="100%">
+  <rect width="600" height="350" fill="#0f172a" rx="12"/>
+  <text x="300" y="28" fill="#f8fafc" font-size="15" font-weight="bold" text-anchor="middle" font-family="system-ui">Spirometry Flow-Volume Loops (Normal vs Obstructive vs Restrictive)</text>
+  
+  <!-- Axes -->
+  <line x1="80" y1="200" x2="550" y2="200" stroke="#64748b" stroke-width="2"/>
+  <line x1="80" y1="40" x2="80" y2="310" stroke="#64748b" stroke-width="2"/>
+  <text x="45" y="80" fill="#94a3b8" font-size="11" font-family="system-ui" transform="rotate(-90 45,80)">Flow (L/s) Expiration</text>
+  <text x="45" y="270" fill="#94a3b8" font-size="11" font-family="system-ui" transform="rotate(-90 45,270)">Inspiration</text>
+  <text x="320" y="220" fill="#94a3b8" font-size="11" text-anchor="middle" font-family="system-ui">Volume (Liters) TLC -> RV</text>
+  
+  <!-- 1. Normal Loop (Green) -->
+  <path d="M 220,200 L 260,80 L 380,150 L 460,200 Q 340,280 220,200" fill="none" stroke="#22c55e" stroke-width="3"/>
+  <text x="350" y="110" fill="#22c55e" font-size="11" font-weight="bold" font-family="system-ui">Normal Loop</text>
+  
+  <!-- 2. Obstructive Loop (Orange/Red) with Scooped Out Coving -->
+  <path d="M 160,200 L 210,120 Q 280,185 520,200 Q 340,280 160,200" fill="none" stroke="#f97316" stroke-width="3" stroke-dasharray="5,2"/>
+  <text x="360" y="175" fill="#f97316" font-size="11" font-weight="bold" font-family="system-ui">Obstructive (Coved / Scooped-out)</text>
+  
+  <!-- 3. Restrictive Loop (Purple) Miniature shape -->
+  <path d="M 320,200 L 345,110 L 410,160 L 440,200 Q 380,245 320,200" fill="none" stroke="#a855f7" stroke-width="3"/>
+  <text x="445" y="130" fill="#c084fc" font-size="11" font-weight="bold" font-family="system-ui">Restrictive (Witch's Hat)</text>
+  
+  <!-- Legend Box -->
+  <rect x="90" y="270" width="450" height="35" fill="#1e293b" rx="6"/>
+  <text x="315" y="292" fill="#e2e8f0" font-size="10" text-anchor="middle" font-family="system-ui">Obstructive: FEV1/FVC &lt; 70%, Air Trapping (High RV). Restrictive: FEV1/FVC &gt;= 80%, Low TLC.</text>
+</svg>

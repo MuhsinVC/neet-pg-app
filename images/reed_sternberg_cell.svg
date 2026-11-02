@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 300" width="100%" height="100%">
+  <rect width="600" height="300" fill="#18181b" rx="12"/>
+  <text x="300" y="26" fill="#f43f5e" font-size="15" font-weight="bold" text-anchor="middle" font-family="system-ui">Histopathology: Classic Reed-Sternberg Cell ('Owl-Eye' Nuclei)</text>
+  
+  <!-- Background Lymphocytes & Eosinophils -->
+  <circle cx="80" cy="80" r="14" fill="#3b82f6"/>
+  <circle cx="500" cy="90" r="16" fill="#ec4899"/>
+  <circle cx="100" cy="220" r="15" fill="#3b82f6"/>
+  <circle cx="480" cy="210" r="14" fill="#3b82f6"/>
+  
+  <!-- Giant Reed Sternberg Cell Body -->
+  <ellipse cx="300" cy="150" rx="140" ry="95" fill="#fda4af" stroke="#f43f5e" stroke-width="3" opacity="0.85"/>
+  
+  <!-- Bilobed Symmetrical Nucleus -->
+  <circle cx="245" cy="150" r="42" fill="#881337" stroke="#4c0519" stroke-width="2"/>
+  <circle cx="355" cy="150" r="42" fill="#881337" stroke="#4c0519" stroke-width="2"/>
+  
+  <!-- Inclusion-Like Eosinophilic Nucleoli ('Owl Eyes') -->
+  <circle cx="245" cy="150" r="16" fill="#f43f5e"/>
+  <circle cx="355" cy="150" r="16" fill="#f43f5e"/>
+  <circle cx="240" cy="146" r="4" fill="#ffffff"/>
+  <circle cx="350" cy="146" r="4" fill="#ffffff"/>
+  
+  <text x="300" y="270" fill="#fbcfe8" font-size="12" font-weight="bold" text-anchor="middle" font-family="system-ui">CD15+ and CD30+ Pathognomonic for Hodgkin Lymphoma</text>
+</svg>

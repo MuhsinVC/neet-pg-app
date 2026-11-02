@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 350" width="100%" height="100%">
+  <rect width="600" height="350" fill="#0f172a" rx="12"/>
+  <text x="300" y="26" fill="#f8fafc" font-size="16" font-weight="bold" text-anchor="middle" font-family="system-ui">Cavernous Sinus Coronal Cross-Section (Anatomy & Pathology)</text>
+  
+  <!-- Pituitary & Sella Turcica (Center) -->
+  <ellipse cx="300" cy="130" rx="45" ry="35" fill="#475569" stroke="#94a3b8" stroke-width="2"/>
+  <text x="300" y="135" fill="#f8fafc" font-size="11" font-weight="bold" text-anchor="middle" font-family="system-ui">Pituitary Gland</text>
+  <path d="M 240,150 Q 300,185 360,150" fill="none" stroke="#cbd5e1" stroke-width="3"/>
+  <text x="300" y="200" fill="#94a3b8" font-size="10" text-anchor="middle" font-family="system-ui">Sphenoid Sinus / Bone</text>
+  
+  <!-- Right Cavernous Sinus Body (Left of viewer) -->
+  <rect x="80" y="80" width="130" height="180" rx="16" fill="#1e293b" stroke="#3b82f6" stroke-width="2.5"/>
+  <text x="145" y="105" fill="#60a5fa" font-size="12" font-weight="bold" text-anchor="middle" font-family="system-ui">Cavernous Sinus</text>
+  
+  <!-- Internal Carotid Artery (Center of sinus) -->
+  <circle cx="145" cy="160" r="24" fill="#dc2626" stroke="#fca5a5" stroke-width="2"/>
+  <text x="145" y="164" fill="#ffffff" font-size="10" font-weight="bold" text-anchor="middle" font-family="system-ui">ICA</text>
+  
+  <!-- Abducens Nerve CN VI (Inside sinus adjacent to ICA) -->
+  <circle cx="120" cy="195" r="9" fill="#f59e0b"/>
+  <text x="120" y="199" fill="#000000" font-size="9" font-weight="bold" text-anchor="middle" font-family="system-ui">VI</text>
+  
+  <!-- Lateral Wall Cranial Nerves: III, IV, V1, V2 -->
+  <circle cx="195" cy="115" r="10" fill="#a855f7"/>
+  <text x="195" y="119" fill="#ffffff" font-size="9" font-weight="bold" text-anchor="middle" font-family="system-ui">III</text>
+  
+  <circle cx="195" cy="145" r="10" fill="#a855f7"/>
+  <text x="195" y="149" fill="#ffffff" font-size="9" font-weight="bold" text-anchor="middle" font-family="system-ui">IV</text>
+  
+  <circle cx="195" cy="175" r="10" fill="#a855f7"/>
+  <text x="195" y="179" fill="#ffffff" font-size="9" font-weight="bold" text-anchor="middle" font-family="system-ui">V1</text>
+  
+  <circle cx="195" cy="205" r="10" fill="#a855f7"/>
+  <text x="195" y="209" fill="#ffffff" font-size="9" font-weight="bold" text-anchor="middle" font-family="system-ui">V2</text>
+  
+  <!-- High-Yield Callout Box -->
+  <rect x="250" y="235" width="320" height="90" fill="#020617" stroke="#eab308" stroke-width="1.5" rx="10"/>
+  <text x="260" y="255" fill="#facc15" font-size="11" font-weight="bold" font-family="system-ui">HIGH-YIELD CLINICAL PEARL:</text>
+  <text x="260" y="275" fill="#e2e8f0" font-size="10" font-family="system-ui">• INSIDE SINUS: Abducens Nerve (CN VI) &amp; ICA.</text>
+  <text x="260" y="293" fill="#e2e8f0" font-size="10" font-family="system-ui">• LATERAL WALL: CN III (Oculomotor), CN IV (Trochlear),</text>
+  <text x="260" y="310" fill="#e2e8f0" font-size="10" font-family="system-ui">  V1 (Ophthalmic), V2 (Maxillary). Note: V3 is NOT in wall!</text>
+</svg>
