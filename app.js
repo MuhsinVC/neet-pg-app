@@ -59,7 +59,7 @@ const SUBJECT_CATEGORIES = {
 // -------------------------------------------------------------
 // LAZY PER-SUBJECT QUESTION LOADING (home page loads only the index)
 // -------------------------------------------------------------
-const DATA_VERSION = '20261103f';
+const DATA_VERSION = '20261103g';
 const REPO_ISSUES_URL = 'https://github.com/MuhsinVC/neet-pg-app/issues/new';
 const _subjectLoads = {};
 
@@ -1820,12 +1820,13 @@ function mdList(block) {
     const m = l.match(/^(\s*)([-*]|\d+[.)])\s+(.*)$/);
     if (!m) { html += ' ' + mdInline(l.trim()); return; }
     const ind = m[1].length, tag = /\d/.test(m[2]) ? 'ol' : 'ul';
+    const mn = /^\*\*Mnemonic:\*\*/.test(m[3]) ? ' class="md-mn"' : '';
     while (stack.length && ind < stack[stack.length - 1].ind) html += '</li></' + stack.pop().tag + '>';
     if (!stack.length || ind > stack[stack.length - 1].ind) {
-      html += '<' + tag + '><li>' + mdInline(m[3]);
+      html += '<' + tag + '><li' + mn + '>' + mdInline(m[3]);
       stack.push({ ind, tag });
     } else {
-      html += '</li><li>' + mdInline(m[3]);
+      html += '</li><li' + mn + '>' + mdInline(m[3]);
     }
   });
   while (stack.length) html += '</li></' + stack.pop().tag + '>';
@@ -1889,11 +1890,11 @@ function fillTheoryNotes() {
   document.querySelectorAll('#theory-vault-container .theory-notes').forEach(el => {
     if (el.getAttribute('data-filled')) return;
     const md = N[el.getAttribute('data-unit')];
-    if (!md) { el.remove(); return; }
+    if (!md) return;
     const html = mdRender(md);
     const n = (html.match(/<details/g) || []).length;
     el.setAttribute('data-filled', '1');
-    el.innerHTML = '<div class="theory-notes-head"><h6>Detailed notes' + (n ? ' <em>' + n + ' sections</em>' : '') + '</h6>'
+    el.innerHTML = '<div class="theory-notes-head"><h6>' + (n ? n + ' sections' : 'Theory') + '</h6>'
       + (n ? '<span><button type="button" onclick="theoryNotesToggle(this,true)">Expand all</button><button type="button" onclick="theoryNotesToggle(this,false)">Collapse all</button></span>' : '')
       + '</div><div class="theory-notes-body">' + html + '</div>';
   });
@@ -1983,16 +1984,13 @@ function renderTheoryVault() {
         </button>
       </div>
 
-      <p class="text-xs sm:text-sm text-slate-600 leading-relaxed">${theory.summary}</p>
-      ${tablesHtml}
-      ${mnemonicsHtml}
+      <div class="theory-notes" data-unit="${unit.unit_id}"><div class="theory-fallback space-y-5"><p class="text-xs sm:text-sm text-slate-600 leading-relaxed">${theory.summary}</p>${tablesHtml}${mnemonicsHtml}</div></div>
     `;
 
     if (unit.general) {
       const qb = card.querySelector('button[onclick^="startUnitQuiz"]'); if (qb) qb.remove();
       const lab = card.querySelector('span'); if (lab) lab.textContent = 'Reference';
     }
-    const nb = document.createElement('div'); nb.className = 'theory-notes'; nb.setAttribute('data-unit', unit.unit_id); card.appendChild(nb);
     contentContainer.appendChild(card);
   });
 
@@ -2042,11 +2040,11 @@ function buildTheoryToc(subj) {
     });
     const nt = card.querySelector('.theory-notes[data-filled]');
     if (nt) {
-      nt.id = card.id + '-notes';
-      subs.push({ id: nt.id, label: 'Detailed notes' });
-      nt.querySelectorAll('details.md-sec').forEach((d, k) => {
+      subs.length = 0;
+      nt.querySelectorAll('.md-ctx, details.md-sec').forEach((d, k) => {
         d.id = card.id + '-sec-' + k;
-        subs.push({ id: d.id, label: (d.querySelector('summary').textContent || '').trim() });
+        const isCtx = d.classList.contains('md-ctx');
+        subs.push({ id: d.id, ctx: isCtx, label: (isCtx ? d.textContent : d.querySelector('summary').textContent || '').trim() });
       });
     }
     items.push({ unit, cardId: card.id, subs });
@@ -2058,7 +2056,7 @@ function buildTheoryToc(subj) {
       + '<button type="button" class="theory-toc-unit" onclick="theoryTocGo(\'' + it.cardId + '\')">'
       + '<b>' + (it.unit.general ? 'Ref' : 'Unit ' + tocEsc(it.unit.unit_number)) + '</b><span>' + tocEsc(it.unit.title) + '</span></button>'
       + '<ul class="theory-toc-subs">'
-      + it.subs.map(x => '<li><button type="button" onclick="theoryTocGo(\'' + x.id + '\')">' + tocEsc(x.label) + '</button></li>').join('')
+      + it.subs.map(x => '<li' + (x.ctx ? ' class="toc-ctx"' : '') + '><button type="button" onclick="theoryTocGo(\'' + x.id + '\')">' + tocEsc(x.label) + '</button></li>').join('')
       + '</ul></li>';
   });
   html += '</ol>';
