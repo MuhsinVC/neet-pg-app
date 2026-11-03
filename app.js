@@ -59,7 +59,7 @@ const SUBJECT_CATEGORIES = {
 // -------------------------------------------------------------
 // LAZY PER-SUBJECT QUESTION LOADING (home page loads only the index)
 // -------------------------------------------------------------
-const DATA_VERSION = '20261102u';
+const DATA_VERSION = '20261102v';
 const REPO_ISSUES_URL = 'https://github.com/MuhsinVC/neet-pg-app/issues/new';
 const _subjectLoads = {};
 
