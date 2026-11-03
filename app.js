@@ -59,7 +59,7 @@ const SUBJECT_CATEGORIES = {
 // -------------------------------------------------------------
 // LAZY PER-SUBJECT QUESTION LOADING (home page loads only the index)
 // -------------------------------------------------------------
-const DATA_VERSION = '20261103c';
+const DATA_VERSION = '20261103d';
 const REPO_ISSUES_URL = 'https://github.com/MuhsinVC/neet-pg-app/issues/new';
 const _subjectLoads = {};
 
@@ -165,6 +165,25 @@ function reportQuestion(qId) {
 function reportCurrentQuestion() {
   const q = state.activeQuestions[state.currentQIndex];
   if (q) reportQuestion(q.id);
+}
+
+function showExtremeNotice() {
+  if (document.getElementById('extreme-notice')) return;
+  const o = document.createElement('div');
+  o.id = 'extreme-notice';
+  o.setAttribute('role', 'dialog');
+  o.setAttribute('aria-modal', 'true');
+  o.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(15,23,42,.6);display:flex;align-items:center;justify-content:center;padding:16px;';
+  o.innerHTML = '<div style="background:#fff;color:#0f172a;max-width:420px;width:100%;border-radius:16px;padding:20px;box-shadow:0 20px 40px rgba(0,0,0,.3);font-family:inherit;">'
+    + '<div style="font-weight:800;font-size:16px;color:#b45309;margin-bottom:8px;">Extreme mode is a work in progress</div>'
+    + '<p style="font-size:14px;line-height:1.5;margin:0 0 10px;">These questions are AI-generated and still being built and checked, so some may contain errors.</p>'
+    + '<p style="font-size:14px;line-height:1.5;margin:0 0 16px;">Please verify answers and explanations against standard textbooks and current guidelines, and use <b>Report this question</b> if you spot a mistake.</p>'
+    + '<button id="extreme-notice-ok" style="width:100%;background:#f59e0b;color:#0f172a;font-weight:800;border:none;border-radius:10px;padding:10px;font-size:14px;cursor:pointer;">I understand</button>'
+    + '</div>';
+  document.body.appendChild(o);
+  const close = () => o.remove();
+  document.getElementById('extreme-notice-ok').onclick = close;
+  o.addEventListener('click', e => { if (e.target === o) close(); });
 }
 
 window.addEventListener('DOMContentLoaded', () => {
@@ -276,6 +295,7 @@ function setQuestionFilter(filterType) {
   if (btnPyq) btnPyq.className = filterType === 'PYQ' ? activeClass : inactiveClass;
   if (btnAdd) btnAdd.className = filterType === 'ADDITIONAL' ? activeClass : inactiveClass;
   if (btnExt) btnExt.className = filterType === 'EXTREME' ? activeExtClass : inactiveClass;
+  if (filterType === 'EXTREME') showExtremeNotice();
 
   // Refresh current view
   if (state.currentView === 'home') renderSubjectsGrid();
@@ -1442,7 +1462,7 @@ function renderReviewList(questions) {
           <i data-lucide="book-open" class="w-3.5 h-3.5 text-indigo-600"></i>
           <span>Clinical Rationale</span>
         </div>
-        <p class="leading-relaxed text-slate-700">${q.explanation.rationale}</p>
+        <p class="leading-relaxed text-slate-700">${q.explanation.rationale.replace(/\n/g, '<br>')}</p>
         
         <div class="bg-amber-50 border border-amber-200 rounded-lg p-2.5 text-amber-900 font-medium">
           <b class="text-amber-800">High-Yield Pearl:</b> ${q.explanation.high_yield_pearl}
@@ -1728,7 +1748,7 @@ function renderNotebookView() {
           <span class="text-rose-700">Your Answer: Option ${m.userChoice || 'Unattempted'}</span>
           <span class="text-emerald-700 font-bold">Correct: Option ${q.correct_option} (${q.options[q.correct_option]})</span>
         </div>
-        <p class="text-slate-700">${q.explanation.rationale}</p>
+        <p class="text-slate-700">${q.explanation.rationale.replace(/\n/g, '<br>')}</p>
         <div class="bg-amber-100/70 border border-amber-200 rounded-lg p-2.5 text-amber-950 font-semibold text-[11px]">
           <b>20th-Notebook Pearl:</b> ${q.explanation.high_yield_pearl}
         </div>
