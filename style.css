@@ -60,3 +60,36 @@ details > summary::-webkit-details-marker {
 
 /* Assertion-Reason questions contain line breaks */
 #quiz-question-text, #post-test-questions-list p { white-space: pre-line; }
+
+/* Quick Theory: contents panel */
+.theory-layout{display:flex;flex-direction:column;gap:12px}
+.theory-cards{min-width:0;flex:1}
+.theory-cards>div{scroll-margin-top:7rem}
+.theory-cards [id^="theory-unit-"] [id]{scroll-margin-top:7rem}
+.theory-toc{position:sticky;top:3.6rem;z-index:20;display:flex;overflow-x:auto;gap:8px;padding:8px 2px;background:#f8fafc;scrollbar-width:none}
+.theory-toc::-webkit-scrollbar{display:none}
+.theory-toc-head{display:none}
+.theory-toc-list{display:flex;gap:8px;list-style:none;margin:0;padding:0}
+.theory-toc-item{flex:0 0 auto}
+.theory-toc-subs{display:none;list-style:none;margin:0;padding:0}
+.theory-toc-unit{display:flex;align-items:center;gap:6px;white-space:nowrap;border:1px solid #e2e8f0;background:#fff;color:#334155;border-radius:999px;padding:6px 12px;font-size:12px;cursor:pointer;max-width:240px}
+.theory-toc-unit b{font-weight:800;color:#4f46e5;white-space:nowrap}
+.theory-toc-unit span{overflow:hidden;text-overflow:ellipsis}
+.theory-toc-item.active .theory-toc-unit{background:#4f46e5;color:#fff;border-color:#4f46e5}
+.theory-toc-item.active .theory-toc-unit b{color:#fde68a}
+@media (min-width:1024px){
+  .theory-layout{flex-direction:row;align-items:flex-start;gap:24px}
+  .theory-toc{position:sticky;top:4.75rem;flex:0 0 260px;width:260px;display:block;overflow-y:auto;overflow-x:hidden;max-height:calc(100vh - 6rem);background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:14px;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+  .theory-toc-head{display:block;font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#64748b;margin-bottom:10px}
+  .theory-toc-head span{display:block;color:#0f172a;font-size:13px;letter-spacing:0;text-transform:none;margin-top:2px}
+  .theory-toc-list{display:block}
+  .theory-toc-item{margin-bottom:4px}
+  .theory-toc-unit{width:100%;max-width:none;border:none;background:transparent;border-radius:10px;padding:8px 10px;white-space:normal;align-items:flex-start;text-align:left;line-height:1.3}
+  .theory-toc-unit:hover{background:#f1f5f9}
+  .theory-toc-unit span{overflow:visible;text-overflow:clip}
+  .theory-toc-item.active .theory-toc-unit{background:#eef2ff;color:#312e81;border:none}
+  .theory-toc-item.active .theory-toc-unit b{color:#4f46e5}
+  .theory-toc-item.active .theory-toc-subs{display:block;margin:2px 0 6px 14px;padding-left:10px;border-left:2px solid #c7d2fe}
+  .theory-toc-subs button{display:block;width:100%;text-align:left;font-size:11.5px;color:#475569;padding:4px 6px;border-radius:6px;background:none;border:none;cursor:pointer;line-height:1.3}
+  .theory-toc-subs button:hover{background:#f1f5f9;color:#4f46e5}
+}

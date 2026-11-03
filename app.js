@@ -59,7 +59,7 @@ const SUBJECT_CATEGORIES = {
 // -------------------------------------------------------------
 // LAZY PER-SUBJECT QUESTION LOADING (home page loads only the index)
 // -------------------------------------------------------------
-const DATA_VERSION = '20261103d';
+const DATA_VERSION = '20261103e';
 const REPO_ISSUES_URL = 'https://github.com/MuhsinVC/neet-pg-app/issues/new';
 const _subjectLoads = {};
 
@@ -1351,7 +1351,7 @@ function renderUnitQuickTheory(unit) {
     theory.core_tables.forEach(tbl => {
       const card = document.createElement('div');
       card.className = "bg-white/5 border border-white/10 rounded-xl p-4 overflow-x-auto";
-      let html = `<h5 class="text-xs font-bold uppercase tracking-wider text-amber-300 mb-2.5">${tbl.title}</h5>`;
+      let html = `<h5 class="text-xs font-bold uppercase tracking-wider text-amber-300 mb-2.5">${thTitle(tbl)}</h5>`;
       html += `<table class="w-full text-left text-xs text-slate-200"><thead><tr class="border-b border-white/10 text-white font-semibold">`;
       tbl.headers.forEach(h => html += `<th class="py-1.5 px-2.5">${h}</th>`);
       html += `</tr></thead><tbody class="divide-y divide-white/5">`;
@@ -1375,7 +1375,7 @@ function renderUnitQuickTheory(unit) {
       li.className = "flex items-start space-x-2";
       li.innerHTML = `
         <span class="w-1.5 h-1.5 rounded-full bg-amber-400 mt-1.5 shrink-0"></span>
-        <div><b class="text-white">${m.name}:</b> ${m.expansion}</div>
+        <div>${thMn(m, 'text-white')}</div>
       `;
       mnemonicsList.appendChild(li);
     });
@@ -1808,7 +1808,7 @@ function renderTheoryVault() {
       theory.core_tables.forEach(tbl => {
         tablesHtml += `
           <div class="bg-slate-50 border border-slate-200 rounded-xl p-4 overflow-x-auto">
-            <h5 class="text-xs font-bold uppercase tracking-wider text-slate-800 mb-2">${tbl.title}</h5>
+            <h5 class="text-xs font-bold uppercase tracking-wider text-slate-800 mb-2">${thTitle(tbl)}</h5>
             <table class="w-full text-left text-xs">
               <thead class="border-b border-slate-200 text-slate-500 font-semibold">
                 <tr>${tbl.headers.map(h => `<th class="py-1.5 px-2.5">${h}</th>`).join('')}</tr>
@@ -1831,7 +1831,7 @@ function renderTheoryVault() {
             <span>Essential Mnemonics</span>
           </h5>
           <ul class="space-y-1.5 text-xs text-amber-950">
-            ${theory.high_yield_mnemonics.map(m => `<li><b>${m.name}:</b> ${m.expansion}</li>`).join('')}
+            ${theory.high_yield_mnemonics.map(m => `<li>${thMn(m)}</li>`).join('')}
           </ul>
         </div>
       `;
@@ -1857,7 +1857,94 @@ function renderTheoryVault() {
     contentContainer.appendChild(card);
   });
 
+  buildTheoryToc(activeSubj);
   lucide.createIcons();
+}
+
+function thTitle(t) { return (t && (t.title || t.table_title)) || 'Key table'; }
+function thMn(m, cls) {
+  const c = cls ? ' class="' + cls + '"' : '';
+  if (m && typeof m === 'object') return '<b' + c + '>' + m.name + ':</b> ' + m.expansion;
+  const str = String(m);
+  const i = str.indexOf(' = ');
+  if (i > 0 && i < 60) return '<b' + c + '>' + str.slice(0, i) + '</b> = ' + str.slice(i + 3);
+  return str;
+}
+
+function tocEsc(t) {
+  return String(t == null ? '' : t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function buildTheoryToc(subj) {
+  const toc = document.getElementById('theory-toc');
+  const cont = document.getElementById('theory-vault-container');
+  if (!toc || !cont) return;
+  const cards = Array.from(cont.children);
+  const items = [];
+  cards.forEach((card, i) => {
+    const unit = subj.units[i];
+    if (!unit) return;
+    card.id = 'theory-unit-' + unit.unit_id;
+    const subs = [];
+    const summ = card.querySelector('p');
+    if (summ) { summ.id = card.id + '-summary'; subs.push({ id: summ.id, label: 'Summary' }); }
+    card.querySelectorAll('h5').forEach((h, j) => {
+      const box = h.parentElement;
+      const isMn = /mnemonic/i.test(h.textContent);
+      box.id = card.id + (isMn ? '-mnemonics' : '-table-' + j);
+      subs.push({ id: box.id, label: isMn ? 'Mnemonics' : h.textContent.trim() });
+    });
+    items.push({ unit, cardId: card.id, subs });
+  });
+  window.__theoryToc = items;
+  let html = '<div class="theory-toc-head">Contents <span>' + tocEsc(subj.name) + '</span></div><ol class="theory-toc-list">';
+  items.forEach(it => {
+    html += '<li class="theory-toc-item" data-card="' + it.cardId + '">'
+      + '<button type="button" class="theory-toc-unit" onclick="theoryTocGo(\'' + it.cardId + '\')">'
+      + '<b>Unit ' + tocEsc(it.unit.unit_number) + '</b><span>' + tocEsc(it.unit.title) + '</span></button>'
+      + '<ul class="theory-toc-subs">'
+      + it.subs.map(x => '<li><button type="button" onclick="theoryTocGo(\'' + x.id + '\')">' + tocEsc(x.label) + '</button></li>').join('')
+      + '</ul></li>';
+  });
+  html += '</ol>';
+  toc.innerHTML = html;
+  if (!window.__theoryTocBound) {
+    window.__theoryTocBound = true;
+    let tick = false;
+    window.addEventListener('scroll', () => {
+      if (tick) return; tick = true;
+      requestAnimationFrame(() => { tick = false; theoryTocHighlight(); });
+    }, { passive: true });
+  }
+  theoryTocHighlight();
+}
+
+function theoryTocGo(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function theoryTocHighlight() {
+  const items = window.__theoryToc;
+  const view = document.getElementById('view-theory');
+  if (!items || !items.length || !view || view.classList.contains('hidden')) return;
+  let cur = items[0].cardId;
+  items.forEach(it => {
+    const el = document.getElementById(it.cardId);
+    if (el && el.style.display !== 'none' && el.getBoundingClientRect().top <= 140) cur = it.cardId;
+  });
+  document.querySelectorAll('#theory-toc .theory-toc-item').forEach(li => {
+    const on = li.getAttribute('data-card') === cur;
+    if (on !== li.classList.contains('active')) {
+      li.classList.toggle('active', on);
+      if (on) {
+        const btn = li.querySelector('.theory-toc-unit');
+        const bar = document.getElementById('theory-toc');
+        if (btn && bar && bar.scrollWidth > bar.clientWidth + 2) bar.scrollTo({ left: btn.offsetLeft - 40, behavior: 'smooth' });
+      }
+    }
+  });
 }
 
 function filterTheorySearch() {
@@ -1866,6 +1953,8 @@ function filterTheorySearch() {
   cards.forEach(c => {
     const text = c.textContent.toLowerCase();
     c.style.display = text.includes(query) ? '' : 'none';
+    const li = document.querySelector('#theory-toc .theory-toc-item[data-card="' + c.id + '"]');
+    if (li) li.style.display = text.includes(query) ? '' : 'none';
   });
 }
 
