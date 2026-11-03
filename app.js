@@ -59,7 +59,7 @@ const SUBJECT_CATEGORIES = {
 // -------------------------------------------------------------
 // LAZY PER-SUBJECT QUESTION LOADING (home page loads only the index)
 // -------------------------------------------------------------
-const DATA_VERSION = '20261103e';
+const DATA_VERSION = '20261103f';
 const REPO_ISSUES_URL = 'https://github.com/MuhsinVC/neet-pg-app/issues/new';
 const _subjectLoads = {};
 
@@ -1767,6 +1767,141 @@ function filterNotebook() {
 // -------------------------------------------------------------
 // QUICK HIGH-YIELD THEORY (GLOBAL VAULT)
 // -------------------------------------------------------------
+
+// -------------------------------------------------------------
+// QUICK THEORY: DETAILED NOTES (markdown, lazy-loaded from data/theory.js)
+// -------------------------------------------------------------
+const GENERAL_THEORY = {
+  subject_id: 'GENERAL_REF', name: 'General Reference', icon: 'book-open',
+  units: [
+    { unit_id: 'GEN_OVERVIEW', unit_number: '', general: true, title: 'Exam overview, study plan and source notes',
+      quick_theory: { summary: 'How NEET PG tests you, the question-solving routine, terms used throughout, the study plan, and notes on sources and coverage.' } },
+    { unit_id: 'GEN_INDEX', unit_number: '', general: true, title: 'Alternate spellings and terms index',
+      quick_theory: { summary: 'Alternate spellings and synonyms of high-yield topics (for example galactosaemia / galactosemia), each pointing to the subject where it is covered.' } },
+    { unit_id: 'GEN_GLOSSARY', unit_number: '', general: true, title: 'Glossary of acronyms and abbreviations',
+      quick_theory: { summary: 'Expansions of the acronyms and abbreviations used across all Quick Theory notes.' } }
+  ]
+};
+function theorySubjectList() { return state.curriculum.subjects.concat([GENERAL_THEORY]); }
+function activeTheorySubject() {
+  const list = theorySubjectList();
+  const id = state.selectedTheorySubjectId || list[0].subject_id;
+  return list.find(s => s.subject_id === id) || null;
+}
+
+let _theoryNotesPromise = null;
+function loadTheoryNotes() {
+  if (window.__theoryNotes) return Promise.resolve();
+  if (_theoryNotesPromise) return _theoryNotesPromise;
+  _theoryNotesPromise = new Promise(resolve => {
+    const el = document.createElement('script');
+    el.src = 'data/theory.js?v=' + DATA_VERSION;
+    el.onload = () => resolve();
+    el.onerror = () => { _theoryNotesPromise = null; resolve(); };
+    document.head.appendChild(el);
+  });
+  return _theoryNotesPromise;
+}
+
+function mdInline(s) {
+  let t = String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const codes = [];
+  t = t.replace(/`([^`]+)`/g, (m, c) => { codes.push(c); return '\u0000' + (codes.length - 1) + '\u0000'; });
+  t = t.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+  t = t.replace(/(^|[^*\w])\*(?![\s*])([^*\n]+?)\*(?![*\w])/g, '$1<i>$2</i>');
+  t = t.replace(/\u0000(\d+)\u0000/g, (m, i) => '<code>' + codes[+i] + '</code>');
+  return t;
+}
+
+function mdList(block) {
+  let html = '';
+  const stack = [];
+  block.forEach(l => {
+    const m = l.match(/^(\s*)([-*]|\d+[.)])\s+(.*)$/);
+    if (!m) { html += ' ' + mdInline(l.trim()); return; }
+    const ind = m[1].length, tag = /\d/.test(m[2]) ? 'ol' : 'ul';
+    while (stack.length && ind < stack[stack.length - 1].ind) html += '</li></' + stack.pop().tag + '>';
+    if (!stack.length || ind > stack[stack.length - 1].ind) {
+      html += '<' + tag + '><li>' + mdInline(m[3]);
+      stack.push({ ind, tag });
+    } else {
+      html += '</li><li>' + mdInline(m[3]);
+    }
+  });
+  while (stack.length) html += '</li></' + stack.pop().tag + '>';
+  return html;
+}
+
+function mdTable(rows) {
+  const cells = r => r.replace(/^\s*\|/, '').replace(/\|\s*$/, '').split('|').map(c => c.trim());
+  const head = cells(rows[0]);
+  const body = rows.slice(/^\s*\|[\s:|-]+\|\s*$/.test(rows[1] || '') ? 2 : 1);
+  return '<div class="md-table"><table><thead><tr>' + head.map(c => '<th>' + mdInline(c) + '</th>').join('') + '</tr></thead><tbody>'
+    + body.map(r => '<tr>' + cells(r).map(c => '<td>' + mdInline(c) + '</td>').join('') + '</tr>').join('')
+    + '</tbody></table></div>';
+}
+
+function mdRender(md) {
+  const lines = String(md).split('\n');
+  const out = [];
+  const secLvl = lines.some(l => /^###\s/.test(l)) ? 3 : 2;
+  let inSec = false;
+  const closeSec = () => { if (inSec) { out.push('</div></details>'); inSec = false; } };
+  const isList = l => /^\s*([-*]|\d+[.)])\s+/.test(l);
+  let i = 0;
+  while (i < lines.length) {
+    const l = lines[i];
+    if (!l.trim() || /^\s*---+\s*$/.test(l)) { i++; continue; }
+    let m;
+    if ((m = l.match(/^(#{1,6})\s+(.*)$/))) {
+      const lvl = m[1].length, txt = m[2].trim();
+      if (lvl === 1) { /* file title: shown by the card */ }
+      else if (lvl === 2 && secLvl === 3) { closeSec(); out.push('<div class="md-ctx">' + mdInline(txt) + '</div>'); }
+      else if (lvl === secLvl) { closeSec(); out.push('<details class="md-sec"><summary>' + mdInline(txt) + '</summary><div class="md-body">'); inSec = true; }
+      else out.push('<div class="md-h4">' + mdInline(txt) + '</div>');
+      i++; continue;
+    }
+    if (/^\s*\|/.test(l)) {
+      const rows = [];
+      while (i < lines.length && /^\s*\|/.test(lines[i])) rows.push(lines[i++]);
+      out.push(mdTable(rows)); continue;
+    }
+    if (isList(l)) {
+      const block = [];
+      while (i < lines.length && lines[i].trim() && !/^#{1,6}\s/.test(lines[i]) && !/^\s*\|/.test(lines[i]) && (isList(lines[i]) || /^\s+\S/.test(lines[i]))) block.push(lines[i++]);
+      out.push(mdList(block)); continue;
+    }
+    if (/^>\s?/.test(l)) {
+      const q = [];
+      while (i < lines.length && /^>\s?/.test(lines[i])) q.push(lines[i++].replace(/^>\s?/, ''));
+      out.push('<blockquote class="md-quote">' + mdInline(q.join(' ')) + '</blockquote>'); continue;
+    }
+    const para = [];
+    while (i < lines.length && lines[i].trim() && !/^#{1,6}\s/.test(lines[i]) && !/^\s*\|/.test(lines[i]) && !isList(lines[i]) && !/^>\s?/.test(lines[i]) && !/^\s*---+\s*$/.test(lines[i])) para.push(lines[i++].trim());
+    out.push('<p class="md-p">' + mdInline(para.join(' ')) + '</p>');
+  }
+  closeSec();
+  return out.join('');
+}
+
+function fillTheoryNotes() {
+  const N = window.__theoryNotes || {};
+  document.querySelectorAll('#theory-vault-container .theory-notes').forEach(el => {
+    if (el.getAttribute('data-filled')) return;
+    const md = N[el.getAttribute('data-unit')];
+    if (!md) { el.remove(); return; }
+    const html = mdRender(md);
+    const n = (html.match(/<details/g) || []).length;
+    el.setAttribute('data-filled', '1');
+    el.innerHTML = '<div class="theory-notes-head"><h6>Detailed notes' + (n ? ' <em>' + n + ' sections</em>' : '') + '</h6>'
+      + (n ? '<span><button type="button" onclick="theoryNotesToggle(this,true)">Expand all</button><button type="button" onclick="theoryNotesToggle(this,false)">Collapse all</button></span>' : '')
+      + '</div><div class="theory-notes-body">' + html + '</div>';
+  });
+}
+function theoryNotesToggle(btn, open) {
+  btn.closest('.theory-notes').querySelectorAll('details.md-sec').forEach(d => { d.open = open; });
+}
+
 function renderTheoryVault() {
   const pillsContainer = document.getElementById('theory-filter-pills');
   const contentContainer = document.getElementById('theory-vault-container');
@@ -1776,7 +1911,7 @@ function renderTheoryVault() {
   contentContainer.innerHTML = '';
 
   // Render subject pills
-  state.curriculum.subjects.forEach(subj => {
+  theorySubjectList().forEach(subj => {
     const isAct = state.selectedTheorySubjectId === subj.subject_id;
     const btn = document.createElement('button');
     btn.className = `px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition flex items-center space-x-1.5 ${
@@ -1794,8 +1929,7 @@ function renderTheoryVault() {
     pillsContainer.appendChild(btn);
   });
 
-  const activeSubjectId = state.selectedTheorySubjectId || state.curriculum.subjects[0].subject_id;
-  const activeSubj = state.curriculum.subjects.find(s => s.subject_id === activeSubjectId);
+  const activeSubj = activeTheorySubject();
   if (!activeSubj) return;
 
   activeSubj.units.forEach(unit => {
@@ -1854,11 +1988,23 @@ function renderTheoryVault() {
       ${mnemonicsHtml}
     `;
 
+    if (unit.general) {
+      const qb = card.querySelector('button[onclick^="startUnitQuiz"]'); if (qb) qb.remove();
+      const lab = card.querySelector('span'); if (lab) lab.textContent = 'Reference';
+    }
+    const nb = document.createElement('div'); nb.className = 'theory-notes'; nb.setAttribute('data-unit', unit.unit_id); card.appendChild(nb);
     contentContainer.appendChild(card);
   });
 
   buildTheoryToc(activeSubj);
   lucide.createIcons();
+  loadTheoryNotes().then(() => {
+    if (activeTheorySubject() !== activeSubj) return;
+    fillTheoryNotes();
+    buildTheoryToc(activeSubj);
+    lucide.createIcons();
+    filterTheorySearch();
+  });
 }
 
 function thTitle(t) { return (t && (t.title || t.table_title)) || 'Key table'; }
@@ -1894,6 +2040,15 @@ function buildTheoryToc(subj) {
       box.id = card.id + (isMn ? '-mnemonics' : '-table-' + j);
       subs.push({ id: box.id, label: isMn ? 'Mnemonics' : h.textContent.trim() });
     });
+    const nt = card.querySelector('.theory-notes[data-filled]');
+    if (nt) {
+      nt.id = card.id + '-notes';
+      subs.push({ id: nt.id, label: 'Detailed notes' });
+      nt.querySelectorAll('details.md-sec').forEach((d, k) => {
+        d.id = card.id + '-sec-' + k;
+        subs.push({ id: d.id, label: (d.querySelector('summary').textContent || '').trim() });
+      });
+    }
     items.push({ unit, cardId: card.id, subs });
   });
   window.__theoryToc = items;
@@ -1901,7 +2056,7 @@ function buildTheoryToc(subj) {
   items.forEach(it => {
     html += '<li class="theory-toc-item" data-card="' + it.cardId + '">'
       + '<button type="button" class="theory-toc-unit" onclick="theoryTocGo(\'' + it.cardId + '\')">'
-      + '<b>Unit ' + tocEsc(it.unit.unit_number) + '</b><span>' + tocEsc(it.unit.title) + '</span></button>'
+      + '<b>' + (it.unit.general ? 'Ref' : 'Unit ' + tocEsc(it.unit.unit_number)) + '</b><span>' + tocEsc(it.unit.title) + '</span></button>'
       + '<ul class="theory-toc-subs">'
       + it.subs.map(x => '<li><button type="button" onclick="theoryTocGo(\'' + x.id + '\')">' + tocEsc(x.label) + '</button></li>').join('')
       + '</ul></li>';
@@ -1922,6 +2077,7 @@ function buildTheoryToc(subj) {
 function theoryTocGo(id) {
   const el = document.getElementById(id);
   if (!el) return;
+  if (el.tagName === 'DETAILS') el.open = true;
   el.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
@@ -1950,6 +2106,7 @@ function theoryTocHighlight() {
 function filterTheorySearch() {
   const query = (document.getElementById('theory-search')?.value || '').toLowerCase().trim();
   const cards = document.querySelectorAll('#theory-vault-container > div');
+  document.querySelectorAll('#theory-vault-container details.md-sec').forEach(d => { if (query) d.open = d.textContent.toLowerCase().includes(query); });
   cards.forEach(c => {
     const text = c.textContent.toLowerCase();
     c.style.display = text.includes(query) ? '' : 'none';
