@@ -4,10 +4,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MedAide — NEET PG & INI-CET All 19 Subjects Preparation Aide</title>
-  <link rel="stylesheet" href="tailwind.css?v=20261103i">
+  <link rel="stylesheet" href="tailwind.css?v=20261104a">
   <!-- Lucide Icons -->
   <script src="vendor/lucide.min.js"></script>
-  <link rel="stylesheet" href="style.css?v=20261103i">
+  <link rel="stylesheet" href="style.css?v=20261104a">
 </head>
 <body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col font-sans antialiased selection:bg-indigo-100 selection:text-indigo-800">
 
@@ -543,12 +543,12 @@
         <!-- Right: Question Palette (Visible during Grand Test on Desktop) -->
         <div id="gt-palette-column" class="hidden lg:col-span-1 bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex flex-col h-[520px]">
           <h4 class="text-xs font-bold text-slate-900 uppercase tracking-wider mb-2 flex items-center justify-between">
-            <span>Question Palette</span>
+            <span id="palette-title">Question Palette</span>
             <span id="palette-status-count" class="text-[10px] text-slate-400">0 / 200</span>
           </h4>
 
           <!-- Legend -->
-          <div class="grid grid-cols-2 gap-1.5 text-[10px] font-semibold text-slate-500 pb-2 border-b border-slate-100 mb-2">
+          <div id="palette-legend" class="grid grid-cols-2 gap-1.5 text-[10px] font-semibold text-slate-500 pb-2 border-b border-slate-100 mb-2">
             <span class="flex items-center space-x-1"><span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> <span>Answered</span></span>
             <span class="flex items-center space-x-1"><span class="w-2.5 h-2.5 rounded-full bg-purple-500"></span> <span>Review</span></span>
             <span class="flex items-center space-x-1"><span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span> <span>Ans & Rev</span></span>
@@ -560,7 +560,7 @@
             <!-- Injected via JavaScript -->
           </div>
 
-          <button onclick="submitGrandTestConfirm()" class="mt-2 w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition shadow-sm">
+          <button id="palette-submit-btn" onclick="submitGrandTestConfirm()" class="mt-2 w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition shadow-sm">
             Submit Grand Test
           </button>
         </div>
@@ -746,7 +746,7 @@
   <div id="palette-modal" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm hidden flex items-center justify-center p-4">
     <div class="bg-white rounded-2xl max-w-md w-full p-5 shadow-2xl space-y-4 animate-fade-in max-h-[85vh] flex flex-col">
       <div class="flex items-center justify-between pb-2 border-b border-slate-100">
-        <h4 class="font-bold text-slate-900 text-sm">Question Palette (1 to 200)</h4>
+        <h4 id="mobile-palette-title" class="font-bold text-slate-900 text-sm">Question Palette (1 to 200)</h4>
         <button onclick="togglePaletteModal()" class="text-slate-400 hover:text-slate-600 p-1">
           <i data-lucide="x" class="w-5 h-5"></i>
         </button>
@@ -880,8 +880,8 @@
   </div>
 
   <!-- DATA & APP LOGIC SCRIPTS -->
-  <script src="data/index.js?v=20261103i"></script>
-  <script src="app.js?v=20261103i"></script>
+  <script src="data/index.js?v=20261104a"></script>
+  <script src="app.js?v=20261104a"></script>
 <div id="loading-overlay" class="hidden fixed inset-0 z-[100] bg-slate-900/60 flex items-center justify-center"><div class="bg-white rounded-2xl px-6 py-5 text-sm font-semibold text-slate-700 shadow-xl">Loading questions…</div></div>
 </body>
 </html>

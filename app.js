@@ -3,7 +3,7 @@
 let state = {
   currentView: 'home',
   curriculum: null,
-  questionFilter: 'ALL', // 'ALL' or 'PYQ'
+  questionFilter: 'PYQ', // 'PYQ' | 'ADDITIONAL' | 'EXTREME' (page opens on PYQ, matching the highlighted toggle)
   activeSubjectCategory: 'ALL',
   activeSubject: null,
   activeUnit: null,
@@ -37,6 +37,7 @@ let state = {
 
   // Persistent User Data:
   userData: {
+    practice: {},         // { [qId]: { r: 'C'|'W', d } } last practice result per question
     history: [],          // [{ mode, title, date, totalQ, correct, wrong, score, maxScore }]
     mistakes: {},         // { [qId]: { q, subjectId, userChoice, lastWrongDate } }
     srs: {},              // { [qId]: { subjectId, nextReviewDate, lastReviewedDate, interval, reps } }
@@ -59,7 +60,7 @@ const SUBJECT_CATEGORIES = {
 // -------------------------------------------------------------
 // LAZY PER-SUBJECT QUESTION LOADING (home page loads only the index)
 // -------------------------------------------------------------
-const DATA_VERSION = '20261103i';
+const DATA_VERSION = '20261104a';
 const REPO_ISSUES_URL = 'https://github.com/MuhsinVC/neet-pg-app/issues/new';
 const _subjectLoads = {};
 
@@ -114,9 +115,9 @@ function subjectIdOfUnit(unitId) {
 // Question counts straight from the index (no need to download questions)
 function unitCount(u) {
   const c = u.counts || { PYQ: 0, PRACTICE: 0, EXTREME: 0 };
-  if (state.questionFilter === 'PYQ') return c.PYQ;
+  if (state.questionFilter === 'ADDITIONAL') return c.PRACTICE;
   if (state.questionFilter === 'EXTREME') return c.EXTREME;
-  return c.PRACTICE;
+  return c.PYQ;
 }
 
 function countDueSrs() {
@@ -191,6 +192,7 @@ window.addEventListener('DOMContentLoaded', () => {
   if (window.CURRICULUM_DATA) {
     state.curriculum = window.CURRICULUM_DATA;
     updateFilterCounts();
+    setQuestionFilter(state.questionFilter);
     renderSubjectsGrid();
     updateStatsHeader();
     lucide.createIcons();
@@ -204,6 +206,8 @@ function loadUserData() {
   if (saved) {
     try {
       state.userData = JSON.parse(saved);
+      ['practice', 'mistakes', 'srs'].forEach(k => { if (!state.userData[k] || typeof state.userData[k] !== 'object') state.userData[k] = {}; });
+      if (!Array.isArray(state.userData.history)) state.userData.history = [];
       const today = new Date().toISOString().split('T')[0];
       if (state.userData.lastActiveDate !== today) {
         state.userData.lastActiveDate = today;
@@ -304,14 +308,9 @@ function setQuestionFilter(filterType) {
 }
 
 function getFilteredQuestions(questions) {
-  if (state.questionFilter === 'PYQ') {
-    return questions.filter(q => q.question_type === 'PYQ');
-  }
-  if (state.questionFilter === 'EXTREME') {
-    return questions.filter(q => q.question_type === 'EXTREME');
-  }
-  // 'ADDITIONAL' returns only PRACTICE questions (modes are mutually exclusive)
-  return questions.filter(q => q.question_type === 'PRACTICE');
+  // Modes are mutually exclusive: exactly one question type per toggle position.
+  const want = state.questionFilter === 'ADDITIONAL' ? 'PRACTICE' : state.questionFilter === 'EXTREME' ? 'EXTREME' : 'PYQ';
+  return questions.filter(q => q.question_type === want);
 }
 
 // -------------------------------------------------------------
@@ -459,12 +458,9 @@ function renderSubjectUnits() {
     const qList = getFilteredQuestions(unit.questions);
     const totalQ = qList.length;
 
-    let answeredCorrect = 0;
-    state.userData.history.forEach(h => {
-      if (h.unitId === unit.unit_id) {
-        answeredCorrect = Math.max(answeredCorrect, h.correct || 0);
-      }
-    });
+    let answeredCorrect = 0, answeredWrong = 0;
+    const pmap = state.userData.practice || {};
+    qList.forEach(q => { const p = pmap[q.id]; if (p && p.r === 'C') answeredCorrect++; else if (p && p.r === 'W') answeredWrong++; });
 
     const masteryPct = totalQ > 0 ? Math.min(100, Math.round((answeredCorrect / totalQ) * 100)) : 0;
 
@@ -484,8 +480,8 @@ function renderSubjectUnits() {
         <!-- Mastery bar -->
         <div class="space-y-1 mb-4">
           <div class="flex justify-between text-[11px] font-semibold text-slate-600">
-            <span>High-Yield Mastery</span>
-            <span>${masteryPct}%</span>
+            <span>Practice progress</span>
+            <span>${answeredCorrect} correct &middot; ${answeredWrong} wrong &middot; ${masteryPct}%</span>
           </div>
           <div class="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
             <div class="bg-gradient-to-r from-brand-600 to-indigo-500 h-1.5 rounded-full" style="width: ${masteryPct}%"></div>
@@ -505,7 +501,7 @@ function renderSubjectUnits() {
             <span>Rapid</span>
           </button>
           <button onclick="startUnitQuiz('${unit.unit_id}')" class="px-3.5 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-bold transition flex items-center space-x-1 shadow-sm">
-            <span>Test</span>
+            <span>Practice</span>
             <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i>
           </button>
         </div>
@@ -735,6 +731,7 @@ function startGrandTestNow(examType) {
 
   startCountdownTimer();
   switchView('quiz');
+  setPaletteChrome('GT');
   renderPaletteGrid();
   renderCurrentQuestion();
 }
@@ -771,6 +768,31 @@ function startCountdownTimer() {
   }, 1000);
 }
 
+function practiceOf(qId) { return (state.userData.practice || {})[qId]; }
+function practiceTileStyle(qId, mobile) {
+  const p = practiceOf(qId);
+  if (p && p.r === 'C') return "bg-emerald-600 text-white font-bold border border-emerald-700";
+  if (p && p.r === 'W') return "bg-rose-600 text-white font-bold border border-rose-700";
+  return "bg-slate-200 text-slate-600 border border-slate-300 hover:bg-slate-300";
+}
+function setPaletteChrome(mode) {
+  const prac = mode === 'PRACTICE';
+  const legend = document.getElementById('palette-legend');
+  if (legend) legend.innerHTML = prac
+    ? '<span class="flex items-center space-x-1"><span class="w-2.5 h-2.5 rounded-full bg-emerald-600"></span> <span>Correct</span></span>'
+      + '<span class="flex items-center space-x-1"><span class="w-2.5 h-2.5 rounded-full bg-rose-600"></span> <span>Wrong last time</span></span>'
+      + '<span class="flex items-center space-x-1"><span class="w-2.5 h-2.5 rounded-full bg-slate-300"></span> <span>Unattempted</span></span>'
+    : '<span class="flex items-center space-x-1"><span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> <span>Answered</span></span>'
+      + '<span class="flex items-center space-x-1"><span class="w-2.5 h-2.5 rounded-full bg-purple-500"></span> <span>Review</span></span>'
+      + '<span class="flex items-center space-x-1"><span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span> <span>Ans & Rev</span></span>'
+      + '<span class="flex items-center space-x-1"><span class="w-2.5 h-2.5 rounded-full bg-slate-200"></span> <span>Unvisited</span></span>';
+  const t = document.getElementById('palette-title'); if (t) t.textContent = prac ? 'Practice Progress' : 'Question Palette';
+  const mt = document.getElementById('mobile-palette-title'); if (mt) mt.textContent = prac ? 'Practice Progress' : 'Question Palette (1 to 200)';
+  const sb = document.getElementById('palette-submit-btn');
+  if (sb) { sb.textContent = prac ? 'Finish practice' : 'Submit Grand Test'; sb.onclick = prac ? () => submitQuiz() : () => submitGrandTestConfirm(); }
+  const cb = document.getElementById('btn-clear-choice'); if (cb) cb.textContent = prac ? 'Try again' : 'Clear';
+}
+
 function togglePaletteModal() {
   const modal = document.getElementById('palette-modal');
   modal.classList.toggle('hidden');
@@ -792,12 +814,13 @@ function renderPaletteGrid() {
     const isMarked = !!state.markedForReview[q.id];
     const isCurrent = state.currentQIndex === idx;
 
-    if (isAnswered) answeredCount++;
+    if (state.quizMode === 'PRACTICE' ? !!practiceOf(q.id) : isAnswered) answeredCount++;
 
     let style = "bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200";
     if (isAnswered && !isMarked) style = "bg-emerald-600 text-white font-bold border border-emerald-700";
     if (isMarked && !isAnswered) style = "bg-purple-600 text-white font-bold border border-purple-700";
     if (isAnswered && isMarked) style = "bg-amber-500 text-white font-bold border border-amber-600";
+    if (state.quizMode === 'PRACTICE') style = practiceTileStyle(q.id);
     if (isCurrent) style += " ring-2 ring-brand-500 ring-offset-1";
 
     btn.className = `w-full h-8 text-[11px] rounded-lg transition ${style}`;
@@ -824,6 +847,7 @@ function renderMobilePaletteGrid() {
     if (isAnswered && !isMarked) style = "bg-emerald-600 text-white font-bold";
     if (isMarked && !isAnswered) style = "bg-purple-600 text-white font-bold";
     if (isAnswered && isMarked) style = "bg-amber-500 text-white font-bold";
+    if (state.quizMode === 'PRACTICE') style = practiceTileStyle(q.id);
     if (isCurrent) style += " ring-2 ring-brand-500";
 
     btn.className = `w-full h-9 text-xs rounded-xl transition ${style}`;
@@ -981,7 +1005,7 @@ async function startUnitQuiz(unitId) {
 }
 
 function startUnitQuizNow(unitId) {
-  state.quizMode = 'UNIT';
+  state.quizMode = 'PRACTICE';
   let unit = null;
   let subjFound = null;
 
@@ -1016,7 +1040,20 @@ function startUnitQuizNow(unitId) {
   document.getElementById('quiz-left-column').className = "lg:col-span-4 bg-white border border-slate-200 rounded-2xl p-5 sm:p-7 shadow-sm space-y-5";
 
   document.getElementById('quiz-unit-title').textContent = `${subjFound.name} • Unit ${unit.unit_number}: ${unit.title}`;
-  document.getElementById('quiz-unit-subtitle').textContent = `Diagnostic Unit Test • ${state.activeQuestions.length} Questions`;
+  document.getElementById('quiz-unit-subtitle').textContent = `Practice • ${state.activeQuestions.length} Questions • progress is saved`;
+  document.getElementById('btn-clear-choice').classList.remove('hidden');
+  document.getElementById('btn-open-palette').classList.remove('hidden');
+  document.getElementById('gt-palette-column').classList.remove('hidden');
+  document.getElementById('quiz-left-column').className = "lg:col-span-3 bg-white border border-slate-200 rounded-2xl p-5 sm:p-7 shadow-sm space-y-5";
+  setPaletteChrome('PRACTICE');
+  // resume at the first unattempted question, else the first one answered wrong last time
+  {
+    const pm = state.userData.practice || {};
+    let idx = state.activeQuestions.findIndex(q => !pm[q.id]);
+    if (idx < 0) idx = state.activeQuestions.findIndex(q => pm[q.id] && pm[q.id].r === 'W');
+    state.currentQIndex = idx < 0 ? 0 : idx;
+  }
+  renderPaletteGrid();
 
   startTimer();
   switchView('quiz');
@@ -1047,7 +1084,7 @@ function formatTime(totalSecs) {
 function openActiveQuestionImage() {
   const q = state.activeQuestions[state.currentQIndex];
   if (q && q.image_url) {
-    openImageModal(q.image_url, `${q.exam_source || 'Clinical Image'} • ${q.topic || ''}`);
+    openImageModal(q.image_url, '');
   }
 }
 
@@ -1095,8 +1132,19 @@ function renderCurrentQuestion() {
     }
     if (q.image_url) {
       imgElem.src = q.image_url;
-      imgElem.alt = q.image_alt || 'Question image';
-      credit.textContent = q.image_credit ? 'Image: ' + q.image_credit : '';
+      imgElem.alt = 'Question image';
+      credit.textContent = '';
+      if (q.image_credit) {
+        const revealNow = (state.quizMode === 'PRACTICE' && state.userAnswers[q.id])
+          || (state.quizMode === 'RAPID_FIRE' && state.rfInstant && state.userAnswers[q.id]);
+        if (revealNow) credit.textContent = 'Image: ' + q.image_credit;
+        else {
+          const b = document.createElement('button');
+          b.type = 'button'; b.className = 'underline hover:text-slate-600'; b.textContent = 'Show image source';
+          b.onclick = () => { credit.textContent = 'Image: ' + q.image_credit; };
+          credit.appendChild(b);
+        }
+      }
       imgContainer.classList.remove('hidden');
     } else {
       credit.textContent = '';
@@ -1126,6 +1174,12 @@ function renderCurrentQuestion() {
     }`;
 
     btn.onclick = () => selectOption(optKey);
+    if (state.quizMode === 'PRACTICE' && selectedOpt) {
+      const base = 'w-full text-left p-3.5 sm:p-4 rounded-xl border text-xs sm:text-sm font-medium transition duration-150 flex items-start space-x-3 ';
+      if (optKey === q.correct_option) btn.className = base + 'border-emerald-500 bg-emerald-50 text-emerald-900 ring-1 ring-emerald-400';
+      else if (isSelected) btn.className = base + 'border-rose-500 bg-rose-50 text-rose-900 ring-1 ring-rose-400';
+      else btn.className = base + 'border-slate-200 text-slate-400';
+    }
     btn.innerHTML = `
       <span class="w-6 h-6 rounded-lg ${
         isSelected ? 'bg-brand-600 text-white' : 'bg-slate-100 text-slate-600'
@@ -1136,6 +1190,8 @@ function renderCurrentQuestion() {
     `;
     container.appendChild(btn);
   });
+
+  if (state.quizMode === 'PRACTICE') showPracticeFeedback(q, selectedOpt);
 
   // Rapid Fire Instant Reveal if already chosen
   if (isRapidFire && selectedOpt && state.rfInstant) {
@@ -1179,6 +1235,19 @@ function selectOption(optKey) {
   const q = state.activeQuestions[state.currentQIndex];
   if (!q) return;
 
+  if (state.quizMode === 'PRACTICE') {
+    if (state.userAnswers[q.id]) return; // locked until "Try again"
+    state.userAnswers[q.id] = optKey;
+    const ok = optKey === q.correct_option;
+    state.userData.practice[q.id] = { r: ok ? 'C' : 'W', d: new Date().toISOString() };
+    // Wrong answers go to the 20th Notebook; practice never touches Spaced Review
+    if (!ok) recordMistake(q, q.subject_id || (state.activeSubject ? state.activeSubject.subject_id : 'GENERAL'), optKey);
+    saveUserData();
+    renderCurrentQuestion();
+    renderPaletteGrid();
+    return;
+  }
+
   state.userAnswers[q.id] = optKey;
 
   if (state.quizMode === 'RAPID_FIRE') {
@@ -1213,6 +1282,27 @@ function selectOption(optKey) {
   }
 
   renderCurrentQuestion();
+}
+
+function showPracticeFeedback(q, userChoice) {
+  const box = document.getElementById('rf-instant-feedback');
+  if (!box) return;
+  const prev = practiceOf(q.id);
+  if (!userChoice) {
+    if (!prev) return;
+    box.classList.remove('hidden');
+    box.className = "p-3 rounded-xl border text-xs animate-fade-in " + (prev.r === 'C' ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-rose-200 bg-rose-50 text-rose-800");
+    box.textContent = prev.r === 'C' ? 'You got this one right last time.' : 'You got this one wrong last time.';
+    return;
+  }
+  const ok = userChoice === q.correct_option;
+  box.classList.remove('hidden');
+  box.className = "p-4 rounded-xl border text-xs space-y-1.5 animate-fade-in " + (ok ? "border-emerald-200 bg-emerald-50 text-emerald-950" : "border-rose-200 bg-rose-50 text-rose-950");
+  const rat = String((q.explanation && q.explanation.rationale) || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/\n/g, '<br>');
+  const pearl = q.explanation && q.explanation.high_yield_pearl ? String(q.explanation.high_yield_pearl).replace(/&/g, '&amp;').replace(/</g, '&lt;') : '';
+  box.innerHTML = '<div class="font-bold ' + (ok ? 'text-emerald-800' : 'text-rose-800') + '">' + (ok ? 'Correct!' : 'Incorrect. The correct answer is option ' + q.correct_option + '.') + (ok ? '' : ' (saved to 20th Notebook)') + '</div>'
+    + '<p class="leading-relaxed text-slate-700">' + rat + '</p>'
+    + (pearl ? '<div class="text-[11px] font-semibold text-amber-900 bg-amber-50 border border-amber-200 rounded-lg p-2"><b>High-Yield Pearl:</b> ' + pearl + '</div>' : '');
 }
 
 function showRapidFireFeedback(q, userChoice) {
@@ -1265,7 +1355,7 @@ function prevQuestion() {
 }
 
 function confirmExitQuiz() {
-  if (confirm("Are you sure you want to exit the current test?")) {
+  if (confirm(state.quizMode === 'PRACTICE' ? "Exit practice? Your progress so far is saved." : "Are you sure you want to exit the current test?")) {
     stopTimer();
     if (state.quizMode === 'RAPID_FIRE') {
       finishRapidFire();
@@ -1280,7 +1370,44 @@ function confirmExitQuiz() {
 // -------------------------------------------------------------
 // POST-TEST COMPLETION & UNIT TEST SCORING
 // -------------------------------------------------------------
+function submitPractice() {
+  stopTimer();
+  const answered = state.activeQuestions.filter(q => state.userAnswers[q.id]);
+  if (!answered.length) { returnToActiveSubject(); return; }
+  const c = answered.filter(q => state.userAnswers[q.id] === q.correct_option).length;
+  const w = answered.length - c;
+  const pct = Math.round((c / answered.length) * 100);
+  state.userData.history.push({
+    mode: 'PRACTICE',
+    subjectId: state.activeSubject ? state.activeSubject.subject_id : '',
+    unitId: state.activeUnit ? state.activeUnit.unit_id : '',
+    title: state.activeUnit ? state.activeUnit.title : 'Practice',
+    date: new Date().toISOString(),
+    totalQ: answered.length, correct: c, wrong: w,
+    elapsedSeconds: state.elapsedSeconds
+  });
+  saveUserData();
+  document.getElementById('post-title').textContent = 'Practice Session Complete';
+  document.getElementById('post-badge').textContent = `${answered.length} of ${state.activeQuestions.length} attempted`;
+  document.getElementById('score-percent').textContent = `${pct}%`;
+  document.getElementById('score-percent-label').textContent = 'Accuracy';
+  document.getElementById('post-summary-text').textContent =
+    `${c} correct and ${w} wrong in ${formatTime(state.elapsedSeconds)}. Your tile progress is saved for next time, and mistakes are in your 20th Notebook. Practice does not feed Spaced Review.`;
+  document.getElementById('review-correct-count').textContent = `${c} Correct`;
+  document.getElementById('review-wrong-count').textContent = `${w} Wrong`;
+  document.getElementById('gt-breakdown-card').classList.add('hidden');
+  if (state.activeUnit && state.activeUnit.quick_theory) {
+    document.getElementById('post-theory-section').classList.remove('hidden');
+    renderUnitQuickTheory(state.activeUnit);
+  } else {
+    document.getElementById('post-theory-section').classList.add('hidden');
+  }
+  renderReviewList(answered);
+  switchView('post-test');
+}
+
 function submitQuiz() {
+  if (state.quizMode === 'PRACTICE') { submitPractice(); return; }
   stopTimer();
   const total = state.activeQuestions.length;
   let correctCount = 0;
@@ -1451,6 +1578,7 @@ function renderReviewList(questions) {
             </span>
           </div>
         </div>
+        ${q.image_credit ? `<div class="text-[10px] text-slate-400 mb-2">Image: ${q.image_credit}</div>` : ''}
       ` : ''}
 
       <div class="space-y-2">
@@ -1741,6 +1869,7 @@ function renderNotebookView() {
             </span>
           </div>
         </div>
+        ${q.image_credit ? `<div class="text-[10px] text-slate-400 mb-2">Image: ${q.image_credit}</div>` : ''}
       ` : ''}
 
       <div class="bg-rose-50 border border-rose-100 rounded-xl p-3 text-xs text-rose-950 space-y-1.5">
@@ -1855,7 +1984,8 @@ function mdRender(md) {
     if (!l.trim() || /^\s*---+\s*$/.test(l)) { i++; continue; }
     let m;
     if ((m = l.match(/^(#{1,6})\s+(.*)$/))) {
-      const lvl = m[1].length, txt = m[2].trim();
+      let lvl = m[1].length, txt = m[2].trim().replace(/^\d{1,2}(\.\d{1,2})*\.?\s+(?=\D)/, '');
+      if (state.curriculum && state.curriculum.subjects.some(s => s.name.toLowerCase() === txt.toLowerCase())) txt += ': core notes';
       if (lvl === 1) { /* file title: shown by the card */ }
       else if (lvl === 2 && secLvl === 3) { closeSec(); out.push('<div class="md-ctx">' + mdInline(txt) + '</div>'); }
       else if (lvl === secLvl) { closeSec(); out.push('<details class="md-sec"><summary>' + mdInline(txt) + '</summary><div class="md-body">'); inSec = true; }
@@ -1979,7 +2109,7 @@ function renderTheoryVault() {
           <h4 class="text-lg font-bold text-slate-900">${unit.title}</h4>
         </div>
         <button onclick="startUnitQuiz('${unit.unit_id}')" class="px-3.5 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-bold transition flex items-center space-x-1 shadow-sm">
-          <span>Test Unit</span>
+          <span>Practice Unit</span>
           <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i>
         </button>
       </div>
@@ -2139,6 +2269,8 @@ function importSyncCode() {
   try {
     const parsed = JSON.parse(raw);
     state.userData = parsed;
+    ['practice', 'mistakes', 'srs'].forEach(k => { if (!state.userData[k] || typeof state.userData[k] !== 'object') state.userData[k] = {}; });
+    if (!Array.isArray(state.userData.history)) state.userData.history = [];
     saveUserData();
     toggleSyncModal();
     alert("Progress restored successfully!");
