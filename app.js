@@ -59,7 +59,7 @@ const SUBJECT_CATEGORIES = {
 // -------------------------------------------------------------
 // LAZY PER-SUBJECT QUESTION LOADING (home page loads only the index)
 // -------------------------------------------------------------
-const DATA_VERSION = '20261103b';
+const DATA_VERSION = '20261103c';
 const REPO_ISSUES_URL = 'https://github.com/MuhsinVC/neet-pg-app/issues/new';
 const _subjectLoads = {};
 
@@ -116,7 +116,7 @@ function unitCount(u) {
   const c = u.counts || { PYQ: 0, PRACTICE: 0, EXTREME: 0 };
   if (state.questionFilter === 'PYQ') return c.PYQ;
   if (state.questionFilter === 'EXTREME') return c.EXTREME;
-  return c.PYQ + c.PRACTICE;
+  return c.PRACTICE;
 }
 
 function countDueSrs() {
@@ -250,7 +250,7 @@ function updateFilterCounts() {
     s.units.forEach(u => {
       const c = u.counts || { PYQ: 0, PRACTICE: 0, EXTREME: 0 };
       totalExtreme += c.EXTREME;
-      totalAdditional += c.PYQ + c.PRACTICE;
+      totalAdditional += c.PRACTICE;
       totalPyq += c.PYQ;
     });
   });
@@ -290,8 +290,8 @@ function getFilteredQuestions(questions) {
   if (state.questionFilter === 'EXTREME') {
     return questions.filter(q => q.question_type === 'EXTREME');
   }
-  // 'ADDITIONAL' returns all standard practice questions + authentic PYQs (excludes EXTREME)
-  return questions.filter(q => q.question_type !== 'EXTREME');
+  // 'ADDITIONAL' returns only PRACTICE questions (modes are mutually exclusive)
+  return questions.filter(q => q.question_type === 'PRACTICE');
 }
 
 // -------------------------------------------------------------
