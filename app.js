@@ -60,7 +60,7 @@ const SUBJECT_CATEGORIES = {
 // -------------------------------------------------------------
 // LAZY PER-SUBJECT QUESTION LOADING (home page loads only the index)
 // -------------------------------------------------------------
-const DATA_VERSION = '20261118c';
+const DATA_VERSION = '20261118d';
 const REPO_ISSUES_URL = 'https://github.com/MuhsinVC/neet-pg-app/issues/new';
 const _subjectLoads = {};
 
@@ -1122,6 +1122,7 @@ function renderCurrentQuestion() {
   const dtq = document.getElementById('dt-quiz-status'); if (dtq) dtq.classList.toggle('hidden', !(state.dtCtx && state.quizMode === 'RAPID_FIRE'));
   const q = state.activeQuestions[state.currentQIndex];
   if (!q) return;
+  if (state.dtCtx && state.quizMode === 'RAPID_FIRE') dtSubtitle(q);
   if (state._qShownId !== q.id || state._qShownMode !== state.quizMode) { state._qShownId = q.id; state._qShownMode = state.quizMode; state._qShownAt = Date.now(); }
 
   const total = state.activeQuestions.length;
@@ -2554,7 +2555,7 @@ function stEnsureTopics() {
   if (ST.loading) return ST.loading;
   ST.loading = new Promise(res => {
     const s = document.createElement('script');
-    s.src = 'data/topics.js?v=20261118c';
+    s.src = 'data/topics.js?v=20261118d';
     s.onload = () => res(window.TOPIC_DATA || null);
     s.onerror = () => { ST.loading = null; res(null); };
     document.head.appendChild(s);
@@ -2993,6 +2994,7 @@ function dtRenderFab(P) {
     '<div class="text-xs text-slate-600 truncate">' + line + '</div></div></div>' +
     '<div class="text-sm font-extrabold text-slate-900 shrink-0">' + done + '<span class="text-slate-400 font-semibold">/' + tgt + '</span></div></div>' +
     '<div class="mt-2 h-1.5 w-full bg-slate-200/70 rounded-full overflow-hidden"><div class="h-full ' + bar + '" style="width:' + pct + '%"></div></div></button>' +
+    (P.block && reached && !inSession ? '<button onclick="toggleFabMenu(); dtShowStatus().then(() => { const r = document.getElementById(\'dt-more-row\'); if (r) r.classList.remove(\'hidden\'); })" class="mt-2 w-full py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg">Do more</button>' : '') +
     (P.block && !reached && !inSession ? '<button onclick="toggleFabMenu(); dtOpen()" class="mt-2 w-full py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-lg">' + (done ? 'Continue today\'s questions' : 'Start today\'s questions') + '</button>' : '');
 }
 
@@ -3023,7 +3025,7 @@ async function dtBuildSession(P, catchUp) {
   const b = P.block;
   let need;
   if (catchUp) {
-    const t = P.todayTarget || 1, n = P.backlog;
+    const t = P.todayTarget || 1, n = typeof catchUp === 'number' ? catchUp : P.backlog;
     need = { PYQ: Math.round(n * P.tgt.PYQ / t), ADD: Math.round(n * P.tgt.ADD / t) };
     need.REV = Math.max(0, n - need.PYQ - need.ADD);
   } else {
@@ -3046,7 +3048,10 @@ async function dtBuildSession(P, catchUp) {
   const rev = need.REV ? await stPickRevision({ count: need.REV, subjects: revSubjects, types: [0, 1], exclude }) : [];
   const part = {};
   study.list.PYQ.forEach(q => part[q] = 'PYQ'); study.list.ADD.forEach(q => part[q] = 'ADD'); rev.forEach(q => part[q] = 'REV');
-  return { ids: study.list.PYQ.concat(study.list.ADD, rev), part, subject: study.subject, need };
+  const ids = study.list.PYQ.concat(study.list.ADD, rev);
+  const prev = new Set(log.map(r => r.qid)), seen = {};
+  ids.forEach(q => { if (prev.has(q)) seen[q] = 1; });
+  return { ids, part, subject: study.subject, need, seen };
 }
 async function dtLaunchIds(ids, title, subtitle, ctx) {
   const T = await stEnsureTopics();
@@ -3073,8 +3078,7 @@ async function dtOpen() {
     dtToast('Preparing today\'s questions…');
     const S = await dtBuildSession(P, false);
     if (!S.ids.length) { dtShowStatus('No new questions left for this plan step. Try Catch up or a revision drill.'); return; }
-    const sub = plBlockName(P.block) + (S.subject ? ' · ' + plSubjectName(S.subject) : '') + ' · ' + S.ids.length + ' left of today\'s ' + P.todayTarget + (done ? ' (' + done + ' already done today)' : '');
-    await dtLaunchIds(S.ids, '🎯 Daily Target', sub, { day: P.today, part: S.part });
+    await dtLaunchIds(S.ids, '🎯 Daily Target', '', { day: P.today, part: S.part, seen: S.seen, kind: 'today', block: plBlockName(P.block), btype: P.block.type, target: P.todayTarget, doneBefore: done, total: S.ids.length });
   } finally { DT_BUSY = false; dtHideToast(); }
 }
 function dtHideToast() { const t = document.getElementById('dt-toast'); if (t && /Preparing/.test(t.textContent)) { t.classList.remove('dt-toast-show'); t.classList.add('dt-toast-hide'); } }
@@ -3085,8 +3089,31 @@ async function dtCatchUp() {
   dtToast('Preparing catch-up questions…');
   try {
     const S = await dtBuildSession(P, true);
-    await dtLaunchIds(S.ids, '🎯 Catch up', S.ids.length + ' backlog questions', { day: P.today, part: S.part, cu: true });
+    await dtLaunchIds(S.ids, '🎯 Catch up', '', { day: P.today, part: S.part, cu: true, seen: S.seen, kind: 'cu', block: plBlockName(P.block), btype: P.block ? P.block.type : 'R', total: S.ids.length });
   } finally { dtHideToast(); }
+}
+async function dtMore(n) {
+  const P = await plProgress();
+  if (!P || !P.block) return;
+  dtCloseStatus();
+  dtToast('Preparing extra questions…');
+  try {
+    const S = await dtBuildSession(P, n);
+    if (!S.ids.length) { alert('No more questions available for this plan step right now.'); return; }
+    await dtLaunchIds(S.ids, '🎯 Daily Target · extra', '', { day: P.today, part: S.part, seen: S.seen, kind: 'more', block: plBlockName(P.block), btype: P.block.type, total: S.ids.length });
+  } finally { dtHideToast(); }
+}
+// live subtitle: cycle · subject of this question · new / seen / revision · how many left
+function dtSubtitle(q) {
+  const c = state.dtCtx, el = document.getElementById('quiz-unit-subtitle');
+  if (!c || !el || !c.kind) return;
+  const answered = Object.keys(state.userAnswers || {}).length, left = Math.max(0, (c.total || 0) - answered);
+  const part = c.part[q.id], rev = part === 'REV' || c.btype === 'R';
+  const chip = rev ? ['Revision', 'bg-emerald-100 text-emerald-800'] : c.seen && c.seen[q.id] ? ['Seen before', 'bg-amber-100 text-amber-800'] : ['New question', 'bg-indigo-100 text-indigo-800'];
+  const typ = part === 'ADD' ? 'Additional' : part === 'PYQ' ? 'PYQ' : '';
+  const count = c.kind === 'today' ? left + ' left of today\'s ' + c.target + (c.doneBefore ? ' (' + c.doneBefore + ' done before this session)' : '') :
+    c.kind === 'cu' ? left + ' backlog questions left' : left + ' extra left';
+  el.innerHTML = pgEsc(c.block + ' · ' + plSubjectName(q.subject_id)) + ' · <span class="inline-block px-1.5 rounded font-bold ' + chip[1] + '">' + chip[0] + (typ ? ' · ' + typ : '') + '</span> · ' + count;
 }
 function dtCloseStatus() { const m = document.getElementById('dt-modal'); if (m) m.classList.add('hidden'); }
 async function dtShowStatus(note) {
@@ -3111,7 +3138,10 @@ async function dtShowStatus(note) {
   else if (P.block && left > 0) h += '<button onclick="dtCloseStatus(); dtOpen()" class="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold">' + (left < P.todayTarget ? 'Continue today\'s questions (' + left + ' left)' : 'Start today\'s questions') + '</button>';
   if (P.backlog && !inSession) h += '<button onclick="dtCatchUp()" class="px-3 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold">Catch up ' + P.backlog + '</button>';
   if (!inSession) h += '<button onclick="dtCloseStatus(); planOpen()" class="px-3 py-2 border border-slate-300 hover:bg-slate-100 text-slate-700 rounded-lg text-xs font-semibold">Edit plan</button>';
+  if (!inSession && P.block && left <= 0) h += '<button onclick="document.getElementById(\'dt-more-row\').classList.toggle(\'hidden\')" class="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold">Do more</button>';
   h += '</div>';
+  if (!inSession && P.block && left <= 0) h += '<div id="dt-more-row" class="hidden bg-emerald-50 border border-emerald-200 rounded-xl p-3 space-y-2"><div class="text-xs text-emerald-900">Feeling keen? Extra questions follow today\'s mix and count towards your plan, putting you ahead.</div><div class="flex flex-wrap gap-2">' +
+    [10, 20, 30, 50].map(n => '<button onclick="dtMore(' + n + ')" class="px-3 py-1.5 bg-white border border-emerald-300 hover:bg-emerald-100 text-emerald-800 rounded-lg text-xs font-bold">' + n + ' more</button>').join('') + '</div></div>';
   h += '<p class="text-[11px] text-slate-500 leading-relaxed">Green = ahead, orange = on time, red = behind. Only questions answered from the Daily Target (or Catch up) count towards the plan. Answers already given today count towards today\'s numbers, so after a plan change you are only given what is still left (for example PYQ 3/10 leaves 7 PYQs).</p>';
   body.innerHTML = h;
   m.classList.remove('hidden');
