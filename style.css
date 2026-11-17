@@ -151,3 +151,6 @@ details > summary::-webkit-details-marker {
 .dt-toast-hide{opacity:0;transform:translate(-50%,20px)}
 .btn-rm{font-size:11px;font-weight:600;color:#94a3b8;padding:4px 8px;border-radius:8px;border:1px solid transparent}
 .btn-rm:hover{color:#be123c;background:#fff1f2;border-color:#fecdd3}
+
+.about-photo{width:76px;height:76px;border-radius:9999px;object-fit:cover;border:3px solid #e0e7ff;box-shadow:0 2px 8px rgba(79,70,229,.18);flex-shrink:0;background:#eef2ff}
+.about-card{display:flex;align-items:center;gap:14px;border:1px solid #e2e8f0;background:#f8fafc;border-radius:14px;padding:12px 14px}

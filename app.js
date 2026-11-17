@@ -60,7 +60,7 @@ const SUBJECT_CATEGORIES = {
 // -------------------------------------------------------------
 // LAZY PER-SUBJECT QUESTION LOADING (home page loads only the index)
 // -------------------------------------------------------------
-const DATA_VERSION = '20261118e';
+const DATA_VERSION = '20261118f';
 const REPO_ISSUES_URL = 'https://github.com/MuhsinVC/neet-pg-app/issues/new';
 const _subjectLoads = {};
 
@@ -2555,7 +2555,7 @@ function stEnsureTopics() {
   if (ST.loading) return ST.loading;
   ST.loading = new Promise(res => {
     const s = document.createElement('script');
-    s.src = 'data/topics.js?v=20261118e';
+    s.src = 'data/topics.js?v=20261118f';
     s.onload = () => res(window.TOPIC_DATA || null);
     s.onerror = () => { ST.loading = null; res(null); };
     document.head.appendChild(s);
@@ -3449,3 +3449,17 @@ function shuffleArray(arr) {
   }
   return array;
 }
+
+
+// ---------------- About us ----------------
+function toggleAboutModal() {
+  const m = document.getElementById('about-modal');
+  if (!m) return;
+  m.classList.toggle('hidden');
+  if (!m.classList.contains('hidden')) { setTimeout(() => { try { lucide.createIcons(); } catch (e) {} }, 30); }
+}
+document.addEventListener('keydown', function (e) {
+  if (e.key !== 'Escape') return;
+  const m = document.getElementById('about-modal');
+  if (m && !m.classList.contains('hidden')) m.classList.add('hidden');
+});
