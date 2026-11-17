@@ -1,4 +1,4 @@
-// MedAide All-in-One Engine (19 Subjects, Grand Tests, Rapid Fire, SRS & 20th Notebook)
+// MedPrepAide All-in-One Engine (19 Subjects, Grand Tests, Rapid Fire, SRS & 20th Notebook)
 
 let state = {
   currentView: 'home',
@@ -60,7 +60,7 @@ const SUBJECT_CATEGORIES = {
 // -------------------------------------------------------------
 // LAZY PER-SUBJECT QUESTION LOADING (home page loads only the index)
 // -------------------------------------------------------------
-const DATA_VERSION = '20261118d';
+const DATA_VERSION = '20261118e';
 const REPO_ISSUES_URL = 'https://github.com/MuhsinVC/neet-pg-app/issues/new';
 const _subjectLoads = {};
 
@@ -2492,10 +2492,10 @@ function toggleSettingsModal() {
 function pgToggleChanged(cb) { pgSetOn(cb.checked); }
 function downloadAnswerLog() {
   alogAll().then(a => {
-    const blob = new Blob([JSON.stringify({ app: 'MedAide', kind: 'answer-log', version: 1, exported: new Date().toISOString(), attempts: a })], { type: 'application/json' });
+    const blob = new Blob([JSON.stringify({ app: 'MedPrepAide', kind: 'answer-log', version: 1, exported: new Date().toISOString(), attempts: a })], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const l = document.createElement('a');
-    l.href = url; l.download = 'medaide-answer-log-' + new Date().toISOString().slice(0, 10) + '.json';
+    l.href = url; l.download = 'medprepaide-answer-log-' + new Date().toISOString().slice(0, 10) + '.json';
     document.body.appendChild(l); l.click(); l.remove();
     setTimeout(() => URL.revokeObjectURL(url), 2000);
   });
@@ -2515,7 +2515,7 @@ function importAnswerLog(input) {
         arr.forEach(x => { if (x && x.qid && x.ts && !seen.has(x.qid + '|' + x.ts)) { const c = Object.assign({}, x); delete c.id; adds.push(alogAdd(c)); } });
         Promise.all(adds).then(() => { alert('Restored ' + adds.length + ' answers.'); toggleSettingsModal(); });
       });
-    } catch (e) { alert('That file is not a MedAide answer log.'); }
+    } catch (e) { alert('That file is not a MedPrepAide answer log.'); }
     input.value = '';
   };
   r.readAsText(f);
@@ -2555,7 +2555,7 @@ function stEnsureTopics() {
   if (ST.loading) return ST.loading;
   ST.loading = new Promise(res => {
     const s = document.createElement('script');
-    s.src = 'data/topics.js?v=20261118d';
+    s.src = 'data/topics.js?v=20261118e';
     s.onload = () => res(window.TOPIC_DATA || null);
     s.onerror = () => { ST.loading = null; res(null); };
     document.head.appendChild(s);
