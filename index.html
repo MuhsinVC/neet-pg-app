@@ -4,10 +4,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MedAide — NEET PG & INI-CET All 19 Subjects Preparation Aide</title>
-  <link rel="stylesheet" href="tailwind.css?v=20261118b">
+  <link rel="stylesheet" href="tailwind.css?v=20261118c">
   <!-- Lucide Icons -->
   <script src="vendor/lucide.min.js"></script>
-  <link rel="stylesheet" href="style.css?v=20261118b">
+  <link rel="stylesheet" href="style.css?v=20261118c">
 </head>
 <body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col font-sans antialiased selection:bg-indigo-100 selection:text-indigo-800">
 
@@ -489,6 +489,9 @@
 
         <!-- Timer, Palette Button, and Counter -->
         <div class="flex items-center space-x-2 sm:space-x-3 shrink-0 text-xs font-semibold">
+          <button id="dt-quiz-status" onclick="dtShowStatus()" class="hidden px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold flex items-center gap-1.5" aria-label="Daily Target status">
+            <span id="dt-quiz-light" class="dt-light dt-none"></span><span class="hidden sm:inline">Status</span>
+          </button>
           <button id="btn-open-palette" onclick="togglePaletteModal()" class="hidden px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold flex items-center space-x-1">
             <i data-lucide="grid" class="w-3.5 h-3.5"></i>
             <span>Palette</span>
@@ -820,7 +823,7 @@
     <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-5 animate-fade-in">
       <div class="flex items-center justify-between pb-3 border-b border-slate-100">
         <div class="flex items-center space-x-2.5">
-          <i data-lucide="cloud-sync" class="w-5 h-5 text-indigo-600"></i>
+          <i data-lucide="database-backup" class="w-5 h-5 text-indigo-600"></i>
           <h4 class="font-bold text-slate-900">Device Storage & Backup</h4>
         </div>
         <button onclick="toggleSyncModal()" class="text-slate-400 hover:text-slate-600 p-1">
@@ -938,6 +941,9 @@
         </button>
       </div>
 
+      <!-- Daily Target status (filled by dtRenderFab) -->
+      <div id="fab-dt-card" class="bg-slate-50 border border-slate-200 rounded-xl p-3"></div>
+
       <!-- Spaced Repetition Due Card -->
       <div class="bg-gradient-to-r from-rose-50 to-pink-50 border border-rose-200/70 rounded-xl p-3 flex items-center justify-between">
         <div class="flex items-center space-x-2.5">
@@ -981,7 +987,7 @@
       <button onclick="toggleSyncModal(); toggleFabMenu();" class="w-full py-2.5 px-3 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-800 font-semibold rounded-xl text-xs flex items-center justify-between transition group">
         <div class="flex items-center space-x-2.5">
           <div class="w-7 h-7 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center group-hover:bg-indigo-600 group-hover:text-white transition shrink-0">
-            <i data-lucide="cloud-sync" class="w-4 h-4"></i>
+            <i data-lucide="database-backup" class="w-4 h-4"></i>
           </div>
           <div class="text-left">
             <div class="font-bold text-slate-900 text-xs">Device Storage & Backup</div>
@@ -996,13 +1002,14 @@
     <!-- Floating Action Button Trigger -->
     <button id="btn-fab-trigger" onclick="toggleFabMenu()" aria-label="Quick Actions & Due Reviews" class="w-12 h-12 rounded-full bg-slate-900 hover:bg-slate-800 active:scale-95 text-white shadow-2xl flex items-center justify-center transition border border-slate-700/60 relative focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
       <i id="fab-icon" data-lucide="sliders" class="w-5 h-5"></i>
+      <span id="fab-dt-dot" class="dt-light dt-none fab-dt-dot" aria-hidden="true"></span>
       <span id="fab-due-badge" class="hidden absolute -top-1 -right-1 bg-rose-500 text-white text-[10px] w-5 h-5 rounded-full font-black flex items-center justify-center shadow-lg border-2 border-white">0</span>
     </button>
   </div>
 
   <!-- DATA & APP LOGIC SCRIPTS -->
-  <script src="data/index.js?v=20261118b"></script>
-  <script src="app.js?v=20261118b"></script>
+  <script src="data/index.js?v=20261118c"></script>
+  <script src="app.js?v=20261118c"></script>
 <div id="loading-overlay" class="hidden fixed inset-0 z-[100] bg-slate-900/60 flex items-center justify-center"><div class="bg-white rounded-2xl px-6 py-5 text-sm font-semibold text-slate-700 shadow-xl">Loading questions…</div></div>
 </body>
 </html>

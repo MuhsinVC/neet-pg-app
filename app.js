@@ -60,7 +60,7 @@ const SUBJECT_CATEGORIES = {
 // -------------------------------------------------------------
 // LAZY PER-SUBJECT QUESTION LOADING (home page loads only the index)
 // -------------------------------------------------------------
-const DATA_VERSION = '20261118b';
+const DATA_VERSION = '20261118c';
 const REPO_ISSUES_URL = 'https://github.com/MuhsinVC/neet-pg-app/issues/new';
 const _subjectLoads = {};
 
@@ -1119,6 +1119,7 @@ function closeImageModal() {
 // QUESTION PRESENTATION & INTERACTION
 // -------------------------------------------------------------
 function renderCurrentQuestion() {
+  const dtq = document.getElementById('dt-quiz-status'); if (dtq) dtq.classList.toggle('hidden', !(state.dtCtx && state.quizMode === 'RAPID_FIRE'));
   const q = state.activeQuestions[state.currentQIndex];
   if (!q) return;
   if (state._qShownId !== q.id || state._qShownMode !== state.quizMode) { state._qShownId = q.id; state._qShownMode = state.quizMode; state._qShownAt = Date.now(); }
@@ -1690,12 +1691,13 @@ function renderSrsView() {
   const btnStart = document.getElementById('btn-start-srs-quiz');
   if (!container) return;
   container.innerHTML = '';
+  rmUndoBanner(container, 'srs');
 
   const dueList = getDueSrsQuestions();
 
   if (dueList.length === 0) {
     btnStart.classList.add('hidden');
-    container.innerHTML = `
+    container.insertAdjacentHTML('beforeend', `
       <div class="bg-white border border-slate-200 rounded-2xl p-8 text-center space-y-3">
         <div class="w-12 h-12 rounded-full bg-emerald-100 text-emerald-600 mx-auto flex items-center justify-center">
           <i data-lucide="check-circle" class="w-6 h-6"></i>
@@ -1703,7 +1705,7 @@ function renderSrsView() {
         <h4 class="text-base font-bold text-slate-900">All Spaced Reviews Up to Date!</h4>
         <p class="text-xs text-slate-500 max-w-sm mx-auto">You have cleared all active review items. Questions you get wrong in Unit Tests or Grand Tests will appear here for timed daily recall.</p>
       </div>
-    `;
+    `);
     lucide.createIcons();
     return;
   }
@@ -1730,9 +1732,12 @@ function renderSrsView() {
         <p class="text-[11px] text-slate-500 line-clamp-1">${q.explanation.rationale}</p>
       </div>
 
+      <div class="flex flex-col items-end gap-1 shrink-0">
       <button onclick="startSingleQuestionDrill('${q.id}')" class="px-3 py-1.5 bg-brand-50 hover:bg-brand-100 text-brand-700 rounded-xl text-xs font-bold transition shrink-0">
         Review
       </button>
+      <button onclick="srsRemove('${q.id}')" class="btn-rm" title="Remove from Spaced Review">Remove</button>
+      </div>
     `;
     container.appendChild(card);
   });
@@ -1746,6 +1751,7 @@ async function startSrsDrill() {
 }
 
 function startSrsDrillNow() {
+  state.dtCtx = null;
   const due = getDueSrsQuestions();
   if (due.length === 0) return;
 
@@ -1771,6 +1777,7 @@ function startSrsDrillNow() {
 }
 
 function startSingleQuestionDrill(qId) {
+  state.dtCtx = null;
   const q = findQuestionById(qId);
   if (!q) return;
 
@@ -1811,7 +1818,7 @@ function renderNotebookView() {
   const pillsContainer = document.getElementById('notebook-subject-pills');
   if (!container || !pillsContainer) return;
 
-  const mistakes = Object.values(state.userData.mistakes);
+  const mistakes = Object.values(state.userData.mistakes).filter(m => !m.hidden);
 
   // Render subject filter pills
   const subjectsWithMistakes = ['ALL', ...new Set(mistakes.map(m => m.subjectId))];
@@ -1831,6 +1838,7 @@ function renderNotebookView() {
   });
 
   container.innerHTML = '';
+  rmUndoBanner(container, 'nb');
 
   let filtered = mistakes;
   if (state.selectedNotebookSubjectId !== 'ALL') {
@@ -1870,7 +1878,8 @@ function renderNotebookView() {
           <span class="bg-amber-100 text-amber-800 text-[11px] font-bold px-2 py-0.5 rounded-md">${m.subjectId}</span>
           <span class="text-xs font-semibold text-slate-500">${q.exam_source}</span>
         </div>
-        <span class="text-[11px] text-slate-400">${new Date(m.lastWrongDate).toLocaleDateString()}</span>
+        <div class="flex items-center gap-1"><span class="text-[11px] text-slate-400">${new Date(m.lastWrongDate).toLocaleDateString()}</span>
+        <button onclick="nbRemove('${q.id}')" class="btn-rm" title="Remove from 20th Notebook">Remove</button></div>
       </div>
 
       <h5 class="text-sm font-semibold text-slate-900 leading-snug">${q.question}</h5>
@@ -2307,6 +2316,7 @@ function toggleFabMenu() {
   const isHidden = popover.classList.contains('hidden');
   if (isHidden) {
     popover.classList.remove('hidden');
+    if (typeof dtRefreshLight === 'function') dtRefreshLight();
     if (icon) icon.setAttribute('data-lucide', 'x');
   } else {
     popover.classList.add('hidden');
@@ -2318,7 +2328,7 @@ function toggleFabMenu() {
 document.addEventListener('click', (e) => {
   const container = document.getElementById('fab-container');
   const popover = document.getElementById('fab-menu-popover');
-  if (container && popover && !container.contains(e.target) && !popover.classList.contains('hidden')) {
+  if (container && popover && e.target.isConnected && !container.contains(e.target) && !popover.classList.contains('hidden')) {
     popover.classList.add('hidden');
     const icon = document.getElementById('fab-icon');
     if (icon) {
@@ -2401,8 +2411,9 @@ function pgLog(q, chosen, ok, mode) {
     const rec = { qid: q.id, ts: Date.now(), mode: mode, chosen: chosen, correct: !!ok,
       ms: timed && state._qShownAt ? Date.now() - state._qShownAt : null,
       subject: sid, qtype: q.question_type || null, why: null, v: 1 };
-    if (state.dtCtx && mode === 'RAPID_FIRE') { rec.daily = state.dtCtx.day; rec.part = state.dtCtx.part[q.id] || null; }
+    if (state.dtCtx && mode === 'RAPID_FIRE') { rec.daily = state.dtCtx.day; rec.part = state.dtCtx.part[q.id] || null; if (state.dtCtx.cu) rec.cu = 1; }
     pgS().att[q.id] = alogAdd(rec);
+    if (rec.daily) Promise.resolve(pgS().att[q.id]).then(() => dtRefreshLight(true));
   } catch (e) { console.error('answer log', e); }
 }
 
@@ -2543,7 +2554,7 @@ function stEnsureTopics() {
   if (ST.loading) return ST.loading;
   ST.loading = new Promise(res => {
     const s = document.createElement('script');
-    s.src = 'data/topics.js?v=20261118b';
+    s.src = 'data/topics.js?v=20261118c';
     s.onload = () => res(window.TOPIC_DATA || null);
     s.onerror = () => { ST.loading = null; res(null); };
     document.head.appendChild(s);
@@ -2858,7 +2869,7 @@ function plDaysBetween(a, b) { return Math.round((plParse(b) - plParse(a)) / PL_
 function plAddDays(k, n) { const d = plParse(k); d.setDate(d.getDate() + n); return plDayKey(d); }
 function plFmt(k) { return plParse(k).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }); }
 function plMonthsToDays(m) { return Math.max(1, Math.round(m * 30.44)); }
-function plBlockName(b) { return (b.type === 'S' ? 'Study cycle ' : 'Revision cycle ') + b.n; }
+function plBlockName(b) { return b.final ? 'Final revision' : (b.type === 'S' ? 'Study cycle ' : 'Revision cycle ') + b.n; }
 const PL_ORDER = ['ANATOMY', 'PHYSIOLOGY', 'BIOCHEMISTRY', 'PATHOLOGY', 'PHARMACOLOGY', 'MICROBIOLOGY', 'FMT', 'PSM', 'OPHTHALMOLOGY', 'ENT',
   'MEDICINE', 'SURGERY', 'OBGY', 'PEDIATRICS', 'ORTHOPEDICS', 'DERMATOLOGY', 'PSYCHIATRY', 'RADIOLOGY', 'ANESTHESIOLOGY'];
 function plSubjectName(id) { const s = (state.curriculum.subjects || []).find(x => x.subject_id === id); return s ? s.name : id; }
@@ -2904,7 +2915,8 @@ async function plProgress() {
   const dayIdx = plDaysBetween(plan.start, today);
   const daily = log.filter(r => r.daily);
   const done = daily.length;
-  const todayRecs = daily.filter(r => r.daily === today);
+  // today's own target counts only Daily Target answers; Catch up answers go to the backlog
+  const todayRecs = daily.filter(r => r.daily === today && !r.cu);
   const doneToday = { PYQ: 0, ADD: 0, REV: 0 };
   todayRecs.forEach(r => { if (doneToday[r.part] != null) doneToday[r.part]++; });
   const lay = plLayout(plan);
@@ -2914,7 +2926,7 @@ async function plProgress() {
   const todayTarget = tgt.PYQ + tgt.ADD + tgt.REV;
   const expYesterday = plExpectedThrough(plan, Math.min(dayIdx - 1, end - 1));
   const expToday = plExpectedThrough(plan, Math.min(dayIdx, end - 1));
-  const backlog = Math.max(0, expYesterday - done);
+  const backlog = Math.max(0, expYesterday - (done - todayRecs.length));
   let status, msg;
   if (dayIdx < 0) { status = 'orange'; msg = 'Your plan starts on ' + plFmt(plan.start) + '.'; }
   else if (backlog > Math.max(1, 0.1 * (todayTarget || 1))) {
@@ -2934,16 +2946,54 @@ async function plProgress() {
     daysLeft: Math.max(0, plDaysBetween(today, plan.target)) };
 }
 
-let DT_REFRESH = null;
-function dtRefreshLight() {
+let DT_REFRESH = null, DT_LAST = null, DT_FROM_ANS = false;
+const DT_WORD = { red: 'Behind schedule', orange: 'On time', green: 'Ahead of schedule' };
+function dtDoneToday(P) { return P.doneToday.PYQ + P.doneToday.ADD + P.doneToday.REV; }
+function dtRefreshLight(fromAnswer) {
   clearTimeout(DT_REFRESH);
+  if (fromAnswer === true) DT_FROM_ANS = true;
   DT_REFRESH = setTimeout(async () => {
-    const el = document.getElementById('dt-light');
-    if (!el) return;
+    const fromAns = DT_FROM_ANS; DT_FROM_ANS = false;
     const P = await plProgress();
-    el.className = 'dt-light ' + (P ? 'dt-' + P.status : 'dt-none');
-    el.title = P ? P.msg : 'Set up your study plan';
+    const cls = 'dt-light ' + (P ? 'dt-' + P.status : 'dt-none');
+    ['dt-light', 'fab-dt-dot', 'dt-quiz-light'].forEach(id => { const el = document.getElementById(id); if (el) { el.className = cls + (id === 'fab-dt-dot' ? ' fab-dt-dot' : ''); el.title = P ? P.msg : 'Set up your study plan'; } });
+    dtRenderFab(P);
+    if (P) {
+      const done = dtDoneToday(P), reached = P.todayTarget > 0 && done >= P.todayTarget;
+      if (fromAns && DT_LAST && !DT_LAST.reached && reached) dtToast('🎉 Today\'s target done: ' + done + ' / ' + P.todayTarget);
+      DT_LAST = { reached };
+    }
   }, 150);
+}
+function dtToast(msg) {
+  let t = document.getElementById('dt-toast');
+  if (!t) { t = document.createElement('div'); t.id = 'dt-toast'; t.className = 'dt-toast'; t.setAttribute('role', 'status'); document.body.appendChild(t); }
+  t.textContent = msg; t.classList.remove('dt-toast-hide'); t.classList.add('dt-toast-show');
+  clearTimeout(t._h); t._h = setTimeout(() => { t.classList.remove('dt-toast-show'); t.classList.add('dt-toast-hide'); }, 3200);
+}
+// Quick Actions card: status light, today's count and a short line
+function dtRenderFab(P) {
+  const box = document.getElementById('fab-dt-card');
+  if (!box) return;
+  if (!P) {
+    box.innerHTML = '<div class="flex items-center justify-between gap-2"><div class="flex items-center gap-2"><span class="dt-light dt-none"></span><div><div class="text-[11px] font-bold text-slate-900 uppercase tracking-wide">Daily Target</div><div class="text-xs text-slate-500">No study plan yet</div></div></div>' +
+      '<button onclick="toggleFabMenu(); planOpen()" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-lg shrink-0">Set up</button></div>';
+    return;
+  }
+  const done = dtDoneToday(P), tgt = P.todayTarget, pct = tgt ? Math.min(100, Math.round(100 * done / tgt)) : 0;
+  const reached = tgt > 0 && done >= tgt;
+  const line = !P.block ? (P.dayIdx < 0 ? 'Plan starts ' + plFmt(P.plan.start) : 'Plan finished') :
+    reached ? 'Today\'s target done' + (P.backlog ? ' · ' + P.backlog + ' backlog' : '') :
+    (tgt - done) + ' left today' + (P.backlog ? ' · ' + P.backlog + ' backlog' : '');
+  const bar = { red: 'bg-rose-500', orange: 'bg-amber-500', green: 'bg-emerald-500' }[P.status];
+  const inSession = state.currentView === 'quiz' && state.dtCtx;
+  box.innerHTML = '<button onclick="toggleFabMenu(); dtShowStatus()" class="w-full text-left" aria-label="Daily Target status">' +
+    '<div class="flex items-center justify-between gap-2"><div class="flex items-center gap-2 min-w-0"><span class="dt-light dt-' + P.status + '"></span><div class="min-w-0">' +
+    '<div class="text-[11px] font-bold text-slate-900 uppercase tracking-wide">Daily Target · ' + DT_WORD[P.status] + '</div>' +
+    '<div class="text-xs text-slate-600 truncate">' + line + '</div></div></div>' +
+    '<div class="text-sm font-extrabold text-slate-900 shrink-0">' + done + '<span class="text-slate-400 font-semibold">/' + tgt + '</span></div></div>' +
+    '<div class="mt-2 h-1.5 w-full bg-slate-200/70 rounded-full overflow-hidden"><div class="h-full ' + bar + '" style="width:' + pct + '%"></div></div></button>' +
+    (P.block && !reached && !inSession ? '<button onclick="toggleFabMenu(); dtOpen()" class="mt-2 w-full py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-lg">' + (done ? 'Continue today\'s questions' : 'Start today\'s questions') + '</button>' : '');
 }
 
 // ---- choosing questions ----
@@ -3009,23 +3059,34 @@ async function dtLaunchIds(ids, title, subtitle, ctx) {
 }
 
 // ---- Daily Target tab ----
+let DT_BUSY = false;
 async function dtOpen() {
   if (!state.userData.plan) { planOpen(); return; }
-  const P = await plProgress();
-  if (!P.block) { dtShowStatus(); return; }
-  const left = Math.max(0, P.todayTarget - P.doneToday.PYQ - P.doneToday.ADD - P.doneToday.REV);
-  if (!left) { dtShowStatus(); return; }
-  const S = await dtBuildSession(P, false);
-  if (!S.ids.length) { dtShowStatus('No new questions left for this plan step. Try Catch up or a revision drill.'); return; }
-  const sub = plBlockName(P.block) + (S.subject ? ' · ' + plSubjectName(S.subject) : '') + ' · ' + S.ids.length + ' questions left today';
-  dtLaunchIds(S.ids, '🎯 Daily Target', sub, { day: P.today, part: S.part });
+  if (DT_BUSY) return;
+  DT_BUSY = true;
+  try {
+    const P = await plProgress();
+    if (!P.block) { dtShowStatus(); return; }
+    const done = dtDoneToday(P);
+    const left = Math.max(0, P.todayTarget - done);
+    if (!left) { dtShowStatus(); return; }
+    dtToast('Preparing today\'s questions…');
+    const S = await dtBuildSession(P, false);
+    if (!S.ids.length) { dtShowStatus('No new questions left for this plan step. Try Catch up or a revision drill.'); return; }
+    const sub = plBlockName(P.block) + (S.subject ? ' · ' + plSubjectName(S.subject) : '') + ' · ' + S.ids.length + ' left of today\'s ' + P.todayTarget + (done ? ' (' + done + ' already done today)' : '');
+    await dtLaunchIds(S.ids, '🎯 Daily Target', sub, { day: P.today, part: S.part });
+  } finally { DT_BUSY = false; dtHideToast(); }
 }
+function dtHideToast() { const t = document.getElementById('dt-toast'); if (t && /Preparing/.test(t.textContent)) { t.classList.remove('dt-toast-show'); t.classList.add('dt-toast-hide'); } }
 async function dtCatchUp() {
   const P = await plProgress();
   if (!P || !P.backlog) return;
   dtCloseStatus();
-  const S = await dtBuildSession(P, true);
-  dtLaunchIds(S.ids, '🎯 Catch up', S.ids.length + ' backlog questions', { day: P.today, part: S.part });
+  dtToast('Preparing catch-up questions…');
+  try {
+    const S = await dtBuildSession(P, true);
+    await dtLaunchIds(S.ids, '🎯 Catch up', S.ids.length + ' backlog questions', { day: P.today, part: S.part, cu: true });
+  } finally { dtHideToast(); }
 }
 function dtCloseStatus() { const m = document.getElementById('dt-modal'); if (m) m.classList.add('hidden'); }
 async function dtShowStatus(note) {
@@ -3045,12 +3106,47 @@ async function dtShowStatus(note) {
     '<div class="bg-slate-50 rounded-lg p-2.5"><div class="text-slate-500">Plan total so far</div><div class="font-bold text-slate-900">' + P.done + ' done / ' + P.expToday + ' due</div></div></div>';
   h += '<div class="flex flex-wrap gap-2">';
   const left = P.todayTarget - P.doneToday.PYQ - P.doneToday.ADD - P.doneToday.REV;
-  if (P.block && left > 0) h += '<button onclick="dtCloseStatus(); dtOpen()" class="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold">Start today\'s questions</button>';
-  if (P.backlog) h += '<button onclick="dtCatchUp()" class="px-3 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold">Catch up ' + P.backlog + '</button>';
-  h += '<button onclick="dtCloseStatus(); planOpen()" class="px-3 py-2 border border-slate-300 hover:bg-slate-100 text-slate-700 rounded-lg text-xs font-semibold">Edit plan</button></div>';
-  h += '<p class="text-[11px] text-slate-500 leading-relaxed">Green = ahead, orange = on time, red = behind. Only questions answered from the Daily Target (or Catch up) count towards the plan.</p>';
+  const inSession = state.currentView === 'quiz' && state.dtCtx && state.quizMode === 'RAPID_FIRE';
+  if (inSession) h += '<button onclick="dtCloseStatus()" class="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold">Back to questions</button>';
+  else if (P.block && left > 0) h += '<button onclick="dtCloseStatus(); dtOpen()" class="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold">' + (left < P.todayTarget ? 'Continue today\'s questions (' + left + ' left)' : 'Start today\'s questions') + '</button>';
+  if (P.backlog && !inSession) h += '<button onclick="dtCatchUp()" class="px-3 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold">Catch up ' + P.backlog + '</button>';
+  if (!inSession) h += '<button onclick="dtCloseStatus(); planOpen()" class="px-3 py-2 border border-slate-300 hover:bg-slate-100 text-slate-700 rounded-lg text-xs font-semibold">Edit plan</button>';
+  h += '</div>';
+  h += '<p class="text-[11px] text-slate-500 leading-relaxed">Green = ahead, orange = on time, red = behind. Only questions answered from the Daily Target (or Catch up) count towards the plan. Answers already given today count towards today\'s numbers, so after a plan change you are only given what is still left (for example PYQ 3/10 leaves 7 PYQs).</p>';
   body.innerHTML = h;
   m.classList.remove('hidden');
+}
+
+// ---- remove from 20th Notebook / Spaced Review ----
+// Only the list entry goes; the answer log stays, so My Strengths and revision picks are unchanged.
+// A removed notebook entry is kept hidden (it can still seed strengths for answers older than the answer log).
+function nbRemove(qid) {
+  const m = state.userData.mistakes[qid]; if (!m) return;
+  m.hidden = new Date().toISOString();
+  state._rmUndo = { kind: 'nb', qid };
+  saveUserData(); renderNotebookView();
+}
+function srsRemove(qid) {
+  const r = state.userData.srs[qid]; if (!r) return;
+  if (!state.userData.srsRemoved || typeof state.userData.srsRemoved !== 'object') state.userData.srsRemoved = {};
+  state.userData.srsRemoved[qid] = Object.assign({ removed: new Date().toISOString() }, r);
+  delete state.userData.srs[qid];
+  state._rmUndo = { kind: 'srs', qid };
+  saveUserData(); renderSrsView();
+}
+function rmUndo() {
+  const u = state._rmUndo; if (!u) return;
+  if (u.kind === 'nb') { const m = state.userData.mistakes[u.qid]; if (m) delete m.hidden; }
+  else { const r = (state.userData.srsRemoved || {})[u.qid]; if (r) { delete r.removed; state.userData.srs[u.qid] = r; delete state.userData.srsRemoved[u.qid]; } }
+  state._rmUndo = null;
+  saveUserData();
+  if (u.kind === 'nb') renderNotebookView(); else renderSrsView();
+}
+function rmUndoBanner(container, kind) {
+  const u = state._rmUndo;
+  if (!u || u.kind !== kind) return;
+  container.insertAdjacentHTML('beforeend', '<div class="flex items-center justify-between gap-2 bg-slate-900 text-white rounded-xl px-4 py-2.5 text-xs"><span>Removed from ' + (kind === 'nb' ? 'the 20th Notebook' : 'Spaced Review') + '. Your answer history and strengths are unchanged.</span>' +
+    '<span class="flex items-center gap-3 shrink-0"><button onclick="rmUndo()" class="font-bold underline">Undo</button><button onclick="state._rmUndo=null; ' + (kind === 'nb' ? 'renderNotebookView()' : 'renderSrsView()') + '" aria-label="Dismiss" class="text-slate-400">✕</button></span></div>');
 }
 
 // ---- revision tests ----
@@ -3129,7 +3225,8 @@ function rvRenderSettings() {
 const PW = { step: 0, d: null };
 function planDefaults() {
   const today = plDayKey(Date.now());
-  return { start: today, target: plAddDays(today, 304), nS: 2, nR: 2, blocks: null, subjectOrder: PL_ORDER.filter(id => (state.curriculum.subjects || []).some(s => s.subject_id === id)), conf: Object.assign({}, state.userData.confidence || {}) };
+  return { start: today, target: plAddDays(today, 304), nS: 2, nR: 2, blocks: null, subjectOrder: PL_ORDER.filter(id => (state.curriculum.subjects || []).some(s => s.subject_id === id)), conf: Object.assign({}, state.userData.confidence || {}),
+    finalOn: true, fin: { pyq: 0, add: 0, rev: 150 } };
 }
 function planBlocksFor(d) {
   // alternate study and revision cycles: S1 R1 S2 R2 ...; months split to fill the time to the target date
@@ -3155,8 +3252,10 @@ function planSuggestTargets(d, blocks) {
 function planOpen() {
   const p = state.userData.plan;
   PW.step = 0;
-  PW.d = p ? { start: p.start, target: p.target, nS: p.blocks.filter(b => b.type === 'S').length, nR: p.blocks.filter(b => b.type === 'R').length,
-    blocks: p.blocks.map(b => Object.assign({}, b)), subjectOrder: (p.subjectOrder || []).slice(), conf: Object.assign({}, state.userData.confidence || {}) } : planDefaults();
+  const fb = p ? p.blocks.find(b => b.final) : null, pb = p ? p.blocks.filter(b => !b.final) : [];
+  PW.d = p ? { start: p.start, target: p.target, nS: pb.filter(b => b.type === 'S').length, nR: pb.filter(b => b.type === 'R').length,
+    blocks: pb.map(b => Object.assign({}, b)), subjectOrder: (p.subjectOrder || []).slice(), conf: Object.assign({}, state.userData.confidence || {}),
+    finalOn: p.finalOn != null ? !!p.finalOn : !!fb, fin: fb ? { pyq: fb.pyq || 0, add: fb.add || 0, rev: fb.rev || 0 } : { pyq: 0, add: 0, rev: 150 } } : planDefaults();
   document.getElementById('plan-modal').classList.remove('hidden');
   planRender();
 }
@@ -3167,7 +3266,7 @@ function planClose(skip) {
 function planNext() {
   const d = PW.d;
   if (PW.step === 0) {
-    if (plDaysBetween(plDayKey(Date.now()), d.target) < 14) { alert('Please pick a target date at least two weeks away.'); return; }
+    if (plDaysBetween(d.start, d.target) < 14) { alert('Please pick a target date at least two weeks after the start date.'); return; }
   }
   if (PW.step === 1) {
     if (d.nS < 1) { alert('Pick at least one study cycle.'); return; }
@@ -3185,6 +3284,13 @@ function planFit() {
   d.blocks.forEach(b => { b.months = Math.max(0.5, Math.round(2 * b.months * total / cur) / 2); });
   planRender();
 }
+// Final revision: an optional last cycle that takes whatever time is left before the target date
+function planFinalDays(d) {
+  const used = d.blocks.reduce((n, b) => n + plMonthsToDays(b.months), 0);
+  return Math.max(0, plDaysBetween(d.start, d.target) - used);
+}
+function planFinalToggle(on) { PW.d.finalOn = !!on; planRender(); }
+function planSetFin(k, v) { PW.d.fin[k] = Math.max(0, Math.min(2000, Math.round(Number(v) || 0))); planRender(); }
 function planSet(i, k, v) { PW.d.blocks[i][k] = Math.max(0, Math.min(2000, Math.round(Number(v) || 0))); planRender(); }
 function planSuggest() { planSuggestTargets(PW.d, PW.d.blocks); planRender(); }
 function planSubjMove(i, dir) { const o = PW.d.subjectOrder, j = i + dir; if (j < 0 || j >= o.length) return; [o[i], o[j]] = [o[j], o[i]]; planRender(); }
@@ -3195,9 +3301,12 @@ function planSave() {
   const blocks = d.blocks.map(b => ({ type: b.type, n: b.n, months: b.months, days: plMonthsToDays(b.months), pyq: b.pyq || 0, add: b.add || 0, rev: b.rev || 0 }));
   const avail = plDaysBetween(d.start, d.target);
   const sum = blocks.reduce((n, b) => n + b.days, 0);
-  if (Math.abs(sum - avail) <= 20 && blocks.length) blocks[blocks.length - 1].days = Math.max(1, blocks[blocks.length - 1].days + avail - sum);
+  const left = avail - sum;
+  if (d.finalOn && left >= 7) {
+    blocks.push({ type: 'R', n: blocks.filter(b => b.type === 'R').length + 1, final: true, months: Math.round(10 * left / 30.44) / 10, days: left, pyq: d.fin.pyq, add: d.fin.add, rev: d.fin.rev });
+  } else if (Math.abs(left) <= 20 && blocks.length) blocks[blocks.length - 1].days = Math.max(1, blocks[blocks.length - 1].days + left);
   const old = state.userData.plan;
-  state.userData.plan = { v: 1, created: old ? old.created : new Date().toISOString(), updated: new Date().toISOString(), start: d.start, target: d.target, blocks, subjectOrder: d.subjectOrder };
+  state.userData.plan = { v: 1, finalOn: !!d.finalOn, created: old ? old.created : new Date().toISOString(), updated: new Date().toISOString(), start: d.start, target: d.target, blocks, subjectOrder: d.subjectOrder };
   state.userData.confidence = Object.assign({}, state.userData.confidence || {}, d.conf);
   state.userData.confidenceDate = new Date().toISOString();
   delete state.userData.planSkipped;
@@ -3215,8 +3324,10 @@ function planRender() {
   const avail = plDaysBetween(d.start, d.target), availM = (avail / 30.44).toFixed(1);
   if (PW.step === 0) {
     h += '<p class="text-xs text-slate-600 leading-relaxed">When do you want to finish your preparation? Usually this is a week or two before the exam.</p>' +
-      '<label class="block text-xs font-semibold text-slate-700">Target date<input type="date" value="' + d.target + '" min="' + plAddDays(d.start, 14) + '" onchange="PW.d.target=this.value; PW.d.blocks=null; planRender()" ' + planInput() + '></label>' +
-      '<p class="text-xs text-slate-500">That is ' + avail + ' days (about ' + availM + ' months) from today.</p>';
+      '<div class="grid grid-cols-2 gap-3"><label class="block text-xs font-semibold text-slate-700">Plan starts<input type="date" value="' + d.start + '" max="' + plAddDays(d.target, -14) + '" onchange="if (this.value) { PW.d.start=this.value; PW.d.blocks=null; } planRender()" ' + planInput() + '></label>' +
+      '<label class="block text-xs font-semibold text-slate-700">Target date<input type="date" value="' + d.target + '" min="' + plAddDays(d.start, 14) + '" onchange="if (this.value) { PW.d.target=this.value; PW.d.blocks=null; } planRender()" ' + planInput() + '></label></div>' +
+      '<p class="text-xs text-slate-500">That is ' + avail + ' days (about ' + availM + ' months).' + (d.start !== plDayKey(Date.now()) ? ' <button onclick="PW.d.start=plDayKey(Date.now()); PW.d.blocks=null; planRender()" class="text-indigo-600 underline font-semibold">Start from today</button>' : '') + '</p>' +
+      '<p class="text-[11px] text-slate-500 leading-relaxed">Days before today count as already scheduled, so a start date in the past creates a backlog.</p>';
   } else if (PW.step === 1) {
     h += '<p class="text-xs text-slate-600 leading-relaxed"><b>Study cycles</b> go through the question bank subject by subject. <b>Revision cycles</b> are pure revision, weighted to your weak areas.</p><div class="grid grid-cols-2 gap-3">' +
       '<label class="text-xs font-semibold text-slate-700">Study cycles<select onchange="PW.d.nS=Number(this.value)" ' + planInput() + '>' + [1, 2, 3, 4].map(n => '<option' + (n === d.nS ? ' selected' : '') + '>' + n + '</option>').join('') + '</select></label>' +
@@ -3232,9 +3343,16 @@ function planRender() {
         '<div class="flex-1 min-w-0"><div class="text-xs font-bold text-slate-900">' + plBlockName(b) + '</div><div class="text-[10px] text-slate-500">' + plFmt(from) + ' – ' + plFmt(plAddDays(d.start, off - 1)) + '</div></div>' +
         '<label class="text-[10px] font-semibold text-slate-600 w-20">Months<input type="number" min="0.5" max="36" step="0.5" value="' + b.months + '" onchange="planMonths(' + i + ', this.value)" ' + planInput('text-center') + '></label></div>';
     });
-    const diff = used - avail / 30.44;
-    h += '</div><div class="flex items-center justify-between text-xs"><span class="' + (Math.abs(diff) > 0.6 ? 'text-rose-600 font-semibold' : 'text-slate-500') + '">Total ' + used + ' of ' + availM + ' months' + (Math.abs(diff) > 0.6 ? (diff > 0 ? ' (goes past your target)' : ' (finishes early)') : '') + '</span>' +
-      '<button onclick="planFit()" class="text-indigo-600 underline font-semibold">Fit to target date</button></div>';
+    const fd = planFinalDays(d), fm = (fd / 30.44).toFixed(1), finOn = d.finalOn && fd >= 7;
+    h += '<div class="flex items-center gap-2 border border-dashed rounded-xl p-2.5 ' + (finOn ? 'bg-slate-100 border-slate-300' : 'bg-white border-slate-200 opacity-60') + '">' +
+      '<div class="w-5"></div><div class="flex-1 min-w-0"><div class="text-xs font-bold text-slate-600">Final revision <span class="font-normal text-slate-400">(auto)</span></div>' +
+      '<div class="text-[10px] text-slate-500">' + (!d.finalOn ? 'Off' : fd >= 7 ? plFmt(plAddDays(d.start, off)) + ' – ' + plFmt(plAddDays(d.target, -1)) + ' · fills the time left' : 'No time left over') + '</div></div>' +
+      '<div class="text-xs font-bold text-slate-500 w-14 text-center">' + (finOn ? fm + ' mo' : '–') + '</div>' +
+      '<label class="flex items-center gap-1 text-[10px] font-semibold text-slate-600 cursor-pointer"><input type="checkbox" ' + (d.finalOn ? 'checked' : '') + ' onchange="planFinalToggle(this.checked)" class="accent-indigo-600"> On</label></div>';
+    const diff = used - avail / 30.44, gap = !finOn && diff < -0.6;
+    h += '</div><div class="flex items-center justify-between text-xs"><span class="' + (diff > 0.6 || gap ? 'text-rose-600 font-semibold' : 'text-slate-500') + '">Total ' + used + (finOn ? ' + ' + fm + ' final' : '') + ' of ' + availM + ' months' + (diff > 0.6 ? ' (goes past your target)' : gap ? ' (finishes early)' : '') + '</span>' +
+      '<button onclick="planFit()" class="text-indigo-600 underline font-semibold">Fit to target date</button></div>' +
+      '<p class="text-[11px] text-slate-500 leading-relaxed"><b>Fit to target date</b> stretches or shrinks every cycle by the same proportion so they fill the time you have (rounded to half months). <b>Final revision</b>, when on, takes any time left after your cycles; it is greyed out because its length is set automatically.</p>';
   } else if (PW.step === 3) {
     const bank = plBankCounts();
     h += '<p class="text-xs text-slate-600 leading-relaxed">Questions per day for each cycle. Suggested numbers cover the whole bank (' + bank.pyq + ' PYQs, ' + bank.add + ' additional) once per study cycle.</p><div class="space-y-2">';
@@ -3246,6 +3364,12 @@ function planRender() {
       fields.forEach(f => { h += '<label class="text-[10px] font-semibold text-slate-600">' + f[1] + '<input type="number" min="0" max="2000" value="' + (b[f[0]] || 0) + '" onchange="planSet(' + i + ',\'' + f[0] + '\', this.value)" ' + planInput('text-center') + '></label>'; });
       h += '</div><div class="text-[10px] text-slate-500">' + plTargetFor(b) + ' questions a day</div></div>';
     });
+    const fd3 = planFinalDays(d);
+    if (d.finalOn && fd3 >= 7) {
+      h += '<div class="border border-dashed border-slate-300 bg-slate-50 rounded-xl p-2.5 space-y-1.5"><div class="text-xs font-bold text-slate-900">Final revision <span class="font-normal text-slate-500">(' + (fd3 / 30.44).toFixed(1) + ' months, auto)</span></div><div class="grid grid-cols-3 gap-2">';
+      [['pyq', 'PYQ / day'], ['add', 'Additional / day'], ['rev', 'Revision / day']].forEach(f => { h += '<label class="text-[10px] font-semibold text-slate-600">' + f[1] + '<input type="number" min="0" max="2000" value="' + (d.fin[f[0]] || 0) + '" onchange="planSetFin(\'' + f[0] + '\', this.value)" ' + planInput('text-center') + '></label>'; });
+      h += '</div><div class="text-[10px] text-slate-500">' + ((d.fin.pyq || 0) + (d.fin.add || 0) + (d.fin.rev || 0)) + ' questions a day</div></div>';
+    }
     h += '</div><p class="text-[11px] text-slate-500 leading-relaxed">In revision cycles every question is a revision question; the PYQ and Additional numbers set how many of each type. All revision questions follow your revision mix (Settings).</p><button onclick="planSuggest()" class="text-xs text-indigo-600 underline font-semibold">Use suggested numbers</button>';
   } else if (PW.step === 4) {
     h += '<p class="text-xs text-slate-600 leading-relaxed">Study cycles go through subjects in this order. Days are shared out by each subject\'s number of questions.</p><div class="space-y-1">';

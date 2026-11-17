@@ -144,3 +144,10 @@ details > summary::-webkit-details-marker {
 .dt-orange{color:rgba(245,158,11,.6)} .dt-red{color:rgba(225,29,72,.65)}
 @keyframes dtGlow{0%,100%{box-shadow:0 0 2px 1px rgba(16,185,129,.35)}50%{box-shadow:0 0 8px 3px rgba(16,185,129,.6)}}
 @media (prefers-reduced-motion:reduce){.dt-green,.dt-orange,.dt-red{animation:none}}
+.fab-dt-dot{position:absolute;top:-2px;left:-2px;width:12px;height:12px;border:2px solid #fff}
+.fab-dt-dot.dt-none{display:none}
+.dt-toast{position:fixed;left:50%;bottom:84px;transform:translate(-50%,20px);opacity:0;pointer-events:none;z-index:60;background:#0f172a;color:#fff;font-size:12px;font-weight:700;padding:8px 14px;border-radius:999px;box-shadow:0 10px 25px rgba(0,0,0,.25);transition:opacity .25s,transform .25s;max-width:90vw;text-align:center}
+.dt-toast-show{opacity:1;transform:translate(-50%,0)}
+.dt-toast-hide{opacity:0;transform:translate(-50%,20px)}
+.btn-rm{font-size:11px;font-weight:600;color:#94a3b8;padding:4px 8px;border-radius:8px;border:1px solid transparent}
+.btn-rm:hover{color:#be123c;background:#fff1f2;border-color:#fecdd3}
