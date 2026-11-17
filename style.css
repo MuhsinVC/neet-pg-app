@@ -133,3 +133,14 @@ details > summary::-webkit-details-marker {
 .md-table table{border-collapse:collapse;width:100%;font-size:12px}
 .md-table th,.md-table td{border:1px solid #e2e8f0;padding:6px 8px;text-align:left;vertical-align:top}
 .md-table th{background:#f1f5f9;font-weight:700;color:#334155}
+
+/* Daily Target status light */
+.dt-light{display:inline-block;width:10px;height:10px;border-radius:999px;flex:0 0 auto;vertical-align:middle;cursor:pointer}
+.dt-none{background:#cbd5e1}
+.dt-green{background:#10b981;animation:dtGlow 2.6s ease-in-out infinite}
+.dt-orange{background:#f59e0b;animation:dtPulse 1.8s ease-out infinite}
+.dt-red{background:#e11d48;animation:dtPulse .9s ease-out infinite}
+@keyframes dtPulse{0%{box-shadow:0 0 0 0 currentColor}70%{box-shadow:0 0 0 7px rgba(0,0,0,0)}100%{box-shadow:0 0 0 0 rgba(0,0,0,0)}}
+.dt-orange{color:rgba(245,158,11,.6)} .dt-red{color:rgba(225,29,72,.65)}
+@keyframes dtGlow{0%,100%{box-shadow:0 0 2px 1px rgba(16,185,129,.35)}50%{box-shadow:0 0 8px 3px rgba(16,185,129,.6)}}
+@media (prefers-reduced-motion:reduce){.dt-green,.dt-orange,.dt-red{animation:none}}

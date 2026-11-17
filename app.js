@@ -60,7 +60,7 @@ const SUBJECT_CATEGORIES = {
 // -------------------------------------------------------------
 // LAZY PER-SUBJECT QUESTION LOADING (home page loads only the index)
 // -------------------------------------------------------------
-const DATA_VERSION = '20261104a';
+const DATA_VERSION = '20261118b';
 const REPO_ISSUES_URL = 'https://github.com/MuhsinVC/neet-pg-app/issues/new';
 const _subjectLoads = {};
 
@@ -206,7 +206,7 @@ function loadUserData() {
   if (saved) {
     try {
       state.userData = JSON.parse(saved);
-      ['practice', 'mistakes', 'srs'].forEach(k => { if (!state.userData[k] || typeof state.userData[k] !== 'object') state.userData[k] = {}; });
+      ['practice', 'mistakes', 'srs', 'why'].forEach(k => { if (!state.userData[k] || typeof state.userData[k] !== 'object') state.userData[k] = {}; });
       if (!Array.isArray(state.userData.history)) state.userData.history = [];
       const today = new Date().toISOString().split('T')[0];
       if (state.userData.lastActiveDate !== today) {
@@ -225,6 +225,7 @@ function saveUserData() {
 }
 
 function updateStatsHeader() {
+  if (typeof dtRefreshLight === 'function') dtRefreshLight();
   const streakText = `${state.userData.streak || 1} d`;
   const statStreak = document.getElementById('stat-streak');
   if (statStreak) statStreak.textContent = streakText;
@@ -318,7 +319,7 @@ function getFilteredQuestions(questions) {
 // -------------------------------------------------------------
 function switchView(viewName) {
   state.currentView = viewName;
-  const views = ['home', 'subject', 'grand-test', 'rapid-fire', 'theory', 'quiz', 'post-test', 'srs', 'notebook'];
+  const views = ['home', 'subject', 'grand-test', 'rapid-fire', 'theory', 'quiz', 'post-test', 'srs', 'notebook', 'strengths'];
   
   views.forEach(v => {
     const el = document.getElementById(`view-${v}`);
@@ -347,6 +348,7 @@ function switchView(viewName) {
   if (viewName === 'theory') renderTheoryVault();
   if (viewName === 'srs') ensureSubjects(dueSrsSubjectIds()).then(renderSrsView);
   if (viewName === 'notebook') renderNotebookView();
+  if (viewName === 'strengths') renderStrengthsView();
 
   window.scrollTo({ top: 0, behavior: 'smooth' });
   setTimeout(() => lucide.createIcons(), 50);
@@ -558,6 +560,7 @@ async function launchRapidFire(scope, targetId) {
 
 function launchRapidFireNow(scope, targetId) {
   state.quizMode = 'RAPID_FIRE';
+  state.dtCtx = scope === 'LIST' ? (state.rfListCtx || null) : null;
   state.rfScope = scope;
   state.rfStreak = 0;
   state.rfAnsweredRecord = [];
@@ -583,6 +586,8 @@ function launchRapidFireNow(scope, targetId) {
   } else if (scope === 'SUBJECT') {
     const s = state.curriculum.subjects.find(x => x.subject_id === targetId);
     if (s) s.units.forEach(u => pool.push(...u.questions));
+  } else if (scope === 'LIST') {
+    pool = (state.rfList || []).slice();
   } else if (scope === 'UNIT') {
     for (const s of state.curriculum.subjects) {
       const u = s.units.find(x => x.unit_id === targetId);
@@ -593,16 +598,16 @@ function launchRapidFireNow(scope, targetId) {
     }
   }
 
-  // Filter if PYQ toggle is on
-  pool = getFilteredQuestions(pool);
+  // Filter if PYQ toggle is on (prepared lists are already chosen)
+  if (scope !== 'LIST') pool = getFilteredQuestions(pool);
 
   if (pool.length === 0) {
     alert("No questions found for the selected filter and scope.");
     return;
   }
 
-  // Shuffle pool thoroughly
-  state.activeQuestions = shuffleArray([...pool]);
+  // Shuffle pool thoroughly (prepared lists keep their order)
+  state.activeQuestions = scope === 'LIST' ? pool : shuffleArray([...pool]);
   state.currentQIndex = 0;
 
   // Setup UI elements for Rapid Fire
@@ -615,8 +620,8 @@ function launchRapidFireNow(scope, targetId) {
   document.getElementById('gt-palette-column').classList.add('hidden');
   document.getElementById('quiz-left-column').className = "lg:col-span-4 bg-white border border-slate-200 rounded-2xl p-5 sm:p-7 shadow-sm space-y-5";
 
-  document.getElementById('quiz-unit-title').textContent = `⚡ Rapid Fire Drill (${scope})`;
-  document.getElementById('quiz-unit-subtitle').textContent = `Infinite Random Questions • End anytime`;
+  document.getElementById('quiz-unit-title').textContent = scope === 'LIST' ? (state.rfTitle || 'Drill') : `⚡ Rapid Fire Drill (${scope})`;
+  document.getElementById('quiz-unit-subtitle').textContent = scope === 'LIST' ? (state.rfSubtitle || `${pool.length} questions • End anytime`) : `Infinite Random Questions • End anytime`;
 
   startTimer();
   switchView('quiz');
@@ -643,7 +648,7 @@ function finishRapidFire() {
   // Auto-record history
   state.userData.history.push({
     mode: 'RAPID_FIRE',
-    title: `Rapid Fire (${state.rfScope})`,
+    title: state.rfScope === 'LIST' ? (state.rfTitle || 'Drill') : `Rapid Fire (${state.rfScope})`,
     date: new Date().toISOString(),
     totalQ: total,
     correct: correct,
@@ -681,6 +686,7 @@ async function startGrandTest(examType) {
 
 function startGrandTestNow(examType) {
   state.quizMode = 'GRAND_TEST';
+  state.dtCtx = null;
   state.userAnswers = {};
   state.markedForReview = {};
   state.elapsedSeconds = 0;
@@ -692,7 +698,7 @@ function startGrandTestNow(examType) {
     'INICET_MINI': { name: 'INI-CET Mini-GT', count: 50, durationMins: 45, pos: 1, neg: 0.33, maxMarks: 50 }
   };
 
-  const cfg = configs[examType];
+  const cfg = examType === 'PRESET' ? state.gtPresetCfg : configs[examType];
   state.gtConfig = cfg;
   state.gtSecondsRemaining = cfg.durationMins * 60;
 
@@ -708,6 +714,7 @@ function startGrandTestNow(examType) {
 
   examPool = getFilteredQuestions(examPool);
   examPool = shuffleArray(examPool);
+  if (examType === 'PRESET') examPool = (state.gtPresetList || []).slice();
 
   if (examPool.length < cfg.count) {
     // If PYQ toggle yields fewer than target, take all available
@@ -915,6 +922,7 @@ function submitGrandTest() {
     subjectMap[sId].total++;
 
     const chosen = state.userAnswers[q.id];
+    if (chosen) pgLog(q, chosen, chosen === q.correct_option, 'GRAND_TEST');
     if (!chosen) {
       unattempted++;
     } else if (chosen === q.correct_option) {
@@ -1005,6 +1013,7 @@ async function startUnitQuiz(unitId) {
 }
 
 function startUnitQuizNow(unitId) {
+  state.dtCtx = null;
   state.quizMode = 'PRACTICE';
   let unit = null;
   let subjFound = null;
@@ -1112,6 +1121,7 @@ function closeImageModal() {
 function renderCurrentQuestion() {
   const q = state.activeQuestions[state.currentQIndex];
   if (!q) return;
+  if (state._qShownId !== q.id || state._qShownMode !== state.quizMode) { state._qShownId = q.id; state._qShownMode = state.quizMode; state._qShownAt = Date.now(); }
 
   const total = state.activeQuestions.length;
   document.getElementById('quiz-counter').textContent = `Q ${state.currentQIndex + 1} of ${total}`;
@@ -1242,6 +1252,7 @@ function selectOption(optKey) {
     state.userData.practice[q.id] = { r: ok ? 'C' : 'W', d: new Date().toISOString() };
     // Wrong answers go to the 20th Notebook; practice never touches Spaced Review
     if (!ok) recordMistake(q, q.subject_id || (state.activeSubject ? state.activeSubject.subject_id : 'GENERAL'), optKey);
+    pgLog(q, optKey, ok, 'PRACTICE');
     saveUserData();
     renderCurrentQuestion();
     renderPaletteGrid();
@@ -1263,6 +1274,7 @@ function selectOption(optKey) {
       scheduleSrsReview(q.id, sId, false);
     }
 
+    pgLog(q, optKey, isCorrect, 'RAPID_FIRE');
     state.rfAnsweredRecord.push({ question: q, userChoice: optKey, isCorrect });
 
     // Update live RF stats
@@ -1303,6 +1315,7 @@ function showPracticeFeedback(q, userChoice) {
   box.innerHTML = '<div class="font-bold ' + (ok ? 'text-emerald-800' : 'text-rose-800') + '">' + (ok ? 'Correct!' : 'Incorrect. The correct answer is option ' + q.correct_option + '.') + (ok ? '' : ' (saved to 20th Notebook)') + '</div>'
     + '<p class="leading-relaxed text-slate-700">' + rat + '</p>'
     + (pearl ? '<div class="text-[11px] font-semibold text-amber-900 bg-amber-50 border border-amber-200 rounded-lg p-2"><b>High-Yield Pearl:</b> ' + pearl + '</div>' : '');
+  pgAttachWhy(box, q, ok);
 }
 
 function showRapidFireFeedback(q, userChoice) {
@@ -1332,6 +1345,7 @@ function showRapidFireFeedback(q, userChoice) {
       <div class="pt-1 text-[11px] font-semibold text-rose-700">Pearl: ${q.explanation.high_yield_pearl}</div>
     `;
   }
+  pgAttachWhy(instantBox, q, isCorrect);
   lucide.createIcons();
 }
 
@@ -1416,6 +1430,7 @@ function submitQuiz() {
   state.activeQuestions.forEach(q => {
     const chosen = state.userAnswers[q.id];
     const sId = state.activeSubject ? state.activeSubject.subject_id : 'GENERAL';
+    if (chosen) pgLog(q, chosen, chosen === q.correct_option, state.quizMode);
     if (chosen === q.correct_option) {
       correctCount++;
       scheduleSrsReview(q.id, sId, true);
@@ -1600,6 +1615,7 @@ function renderReviewList(questions) {
       </div>
     `;
 
+    pgAttachWhyReview(card, q, isCorrect);
     container.appendChild(card);
   });
 
@@ -1881,6 +1897,7 @@ function renderNotebookView() {
         <div class="bg-amber-100/70 border border-amber-200 rounded-lg p-2.5 text-amber-950 font-semibold text-[11px]">
           <b>20th-Notebook Pearl:</b> ${q.explanation.high_yield_pearl}
         </div>
+        ${pgWhyLine(q.id)}
       </div>
     `;
     container.appendChild(card);
@@ -2269,7 +2286,7 @@ function importSyncCode() {
   try {
     const parsed = JSON.parse(raw);
     state.userData = parsed;
-    ['practice', 'mistakes', 'srs'].forEach(k => { if (!state.userData[k] || typeof state.userData[k] !== 'object') state.userData[k] = {}; });
+    ['practice', 'mistakes', 'srs', 'why'].forEach(k => { if (!state.userData[k] || typeof state.userData[k] !== 'object') state.userData[k] = {}; });
     if (!Array.isArray(state.userData.history)) state.userData.history = [];
     saveUserData();
     toggleSyncModal();
@@ -2310,6 +2327,951 @@ document.addEventListener('click', (e) => {
     }
   }
 });
+
+
+// -------------------------------------------------------------
+// ADVANCED PEDAGOGY (step 1): answer log, settings, "why did I miss this"
+// -------------------------------------------------------------
+const PG_WRONG = [['DK', "I didn't know this"], ['MISREAD', 'I misread the question'], ['BUZZ', 'I jumped on a buzzword / stopped early'], ['CHANGED', 'I changed from the right answer'], ['SURE', 'I was sure, but wrong']];
+const PG_RIGHT = [['KNEW', 'I knew it'], ['PART', 'I narrowed it down'], ['GUESS', 'I guessed']];
+const PG_LABEL = {};
+PG_WRONG.concat(PG_RIGHT).forEach(p => { PG_LABEL[p[0]] = p[1]; });
+
+function pgS() { return state._pg || (state._pg = { att: {}, done: {} }); }
+function pgEsc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;'); }
+function pgSettings() { try { return JSON.parse(localStorage.getItem('MEDAIDE_SETTINGS_V1') || '{}') || {}; } catch (e) { return {}; } }
+function pgOn() { return !!pgSettings().pedagogy; }
+function pgSetOn(v) {
+  const s = pgSettings(); s.pedagogy = !!v;
+  try { localStorage.setItem('MEDAIDE_SETTINGS_V1', JSON.stringify(s)); } catch (e) {}
+}
+
+// ---- answer log (IndexedDB; falls back to memory if the browser blocks it) ----
+const ALOG = { db: null, mem: [], ready: null };
+function alogOpen() {
+  if (ALOG.ready) return ALOG.ready;
+  ALOG.ready = new Promise(res => {
+    try {
+      const rq = indexedDB.open('medaide_log', 1);
+      rq.onupgradeneeded = () => {
+        const st = rq.result.createObjectStore('attempts', { keyPath: 'id', autoIncrement: true });
+        st.createIndex('qid', 'qid'); st.createIndex('ts', 'ts');
+      };
+      rq.onsuccess = () => { ALOG.db = rq.result; res(ALOG.db); };
+      rq.onerror = () => res(null);
+      rq.onblocked = () => res(null);
+    } catch (e) { res(null); }
+  });
+  return ALOG.ready;
+}
+function alogAdd(rec) {
+  return alogOpen().then(db => new Promise(res => {
+    if (!db) { rec.id = ALOG.mem.length + 1; ALOG.mem.push(rec); return res(rec.id); }
+    try {
+      const rq = db.transaction('attempts', 'readwrite').objectStore('attempts').add(rec);
+      rq.onsuccess = () => res(rq.result); rq.onerror = () => res(null);
+    } catch (e) { res(null); }
+  }));
+}
+function alogUpdate(id, patch) {
+  if (id == null) return Promise.resolve();
+  return alogOpen().then(db => new Promise(res => {
+    if (!db) { const r = ALOG.mem.find(x => x.id === id); if (r) Object.assign(r, patch); return res(); }
+    try {
+      const st = db.transaction('attempts', 'readwrite').objectStore('attempts');
+      const g = st.get(id);
+      g.onsuccess = () => { if (g.result) st.put(Object.assign(g.result, patch)); res(); };
+      g.onerror = () => res();
+    } catch (e) { res(); }
+  }));
+}
+function alogAll() {
+  return alogOpen().then(db => new Promise(res => {
+    if (!db) return res(ALOG.mem.slice());
+    try {
+      const rq = db.transaction('attempts', 'readonly').objectStore('attempts').getAll();
+      rq.onsuccess = () => res(rq.result || []); rq.onerror = () => res([]);
+    } catch (e) { res([]); }
+  }));
+}
+function pgLog(q, chosen, ok, mode) {
+  try {
+    const timed = mode === 'PRACTICE' || mode === 'RAPID_FIRE';
+    const sid = q.subject_id || (state.activeSubject ? state.activeSubject.subject_id : 'GENERAL');
+    const rec = { qid: q.id, ts: Date.now(), mode: mode, chosen: chosen, correct: !!ok,
+      ms: timed && state._qShownAt ? Date.now() - state._qShownAt : null,
+      subject: sid, qtype: q.question_type || null, why: null, v: 1 };
+    if (state.dtCtx && mode === 'RAPID_FIRE') { rec.daily = state.dtCtx.day; rec.part = state.dtCtx.part[q.id] || null; }
+    pgS().att[q.id] = alogAdd(rec);
+  } catch (e) { console.error('answer log', e); }
+}
+
+// ---- "why did I miss this" ----
+function pgWhyHtml(q, ok) {
+  const done = pgS().done[q.id];
+  const opts = ok ? PG_RIGHT : PG_WRONG;
+  let h = '<div class="pg-why mt-3 pt-3 border-t border-slate-200/70 space-y-1.5" data-q="' + pgEsc(q.id) + '" data-ok="' + (ok ? 1 : 0) + '">';
+  if (done) {
+    h += '<div class="text-[11px] text-slate-600">Noted: <b>' + pgEsc(PG_LABEL[done] || done) + '</b> <button type="button" data-pg-change="1" class="underline text-slate-500 hover:text-slate-800 ml-1">change</button></div></div>';
+    return h;
+  }
+  h += '<div class="text-[11px] font-bold text-slate-600">' + (ok ? 'How sure were you? (optional)' : 'Why did you miss this? (optional)') + '</div><div class="flex flex-wrap gap-1.5">';
+  opts.forEach(p => {
+    h += '<button type="button" data-pg-why="' + p[0] + '" class="px-2.5 py-1 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 text-[11px] font-semibold text-slate-700">' + pgEsc(p[1]) + '</button>';
+  });
+  return h + '</div></div>';
+}
+function pgAttachWhy(box, q, ok) {
+  if (!box || !q || !pgOn()) return;
+  const d = document.createElement('div');
+  d.innerHTML = pgWhyHtml(q, ok);
+  box.appendChild(d.firstChild);
+}
+function pgAttachWhyReview(card, q, ok) {
+  if (!pgOn() || !state.userAnswers[q.id]) return;
+  const d = document.createElement('div');
+  d.innerHTML = pgWhyHtml(q, ok);
+  card.appendChild(d.firstChild);
+}
+function pgSetWhy(qid, key) {
+  const rec = { r: key, d: new Date().toISOString() };
+  if (!state.userData.why) state.userData.why = {};
+  state.userData.why[qid] = rec;
+  pgS().done[qid] = key;
+  saveUserData();
+  Promise.resolve(pgS().att[qid]).then(id => alogUpdate(id, { why: key }));
+}
+function pgWhyLine(qid) {
+  const w = state.userData.why && state.userData.why[qid];
+  if (!w) return '';
+  return '<div class="text-[11px] text-slate-600 pt-1">Why you missed it: <b>' + pgEsc(PG_LABEL[w.r] || w.r) + '</b></div>';
+}
+document.addEventListener('click', (e) => {
+  const t = e.target.closest ? e.target.closest('[data-pg-why],[data-pg-change]') : null;
+  if (!t) return;
+  const wrap = t.closest('.pg-why');
+  if (!wrap) return;
+  const qid = wrap.getAttribute('data-q');
+  const ok = wrap.getAttribute('data-ok') === '1';
+  if (t.hasAttribute('data-pg-change')) {
+    delete pgS().done[qid];
+    const q = findQuestionById(qid) || { id: qid };
+    const d = document.createElement('div'); d.innerHTML = pgWhyHtml(q, ok);
+    wrap.replaceWith(d.firstChild);
+    return;
+  }
+  pgSetWhy(qid, t.getAttribute('data-pg-why'));
+  const q = findQuestionById(qid) || { id: qid };
+  const d = document.createElement('div'); d.innerHTML = pgWhyHtml(q, ok);
+  wrap.replaceWith(d.firstChild);
+});
+
+// ---- settings panel ----
+function toggleSettingsModal() {
+  const m = document.getElementById('settings-modal');
+  if (!m) return;
+  m.classList.toggle('hidden');
+  if (!m.classList.contains('hidden')) {
+    const cb = document.getElementById('pg-toggle'); if (cb) cb.checked = pgOn();
+    rvRenderSettings();
+    alogAll().then(a => { const el = document.getElementById('pg-log-count'); if (el) el.textContent = a.length; });
+  }
+}
+function pgToggleChanged(cb) { pgSetOn(cb.checked); }
+function downloadAnswerLog() {
+  alogAll().then(a => {
+    const blob = new Blob([JSON.stringify({ app: 'MedAide', kind: 'answer-log', version: 1, exported: new Date().toISOString(), attempts: a })], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const l = document.createElement('a');
+    l.href = url; l.download = 'medaide-answer-log-' + new Date().toISOString().slice(0, 10) + '.json';
+    document.body.appendChild(l); l.click(); l.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  });
+}
+function importAnswerLog(input) {
+  const f = input.files && input.files[0];
+  if (!f) return;
+  const r = new FileReader();
+  r.onload = () => {
+    try {
+      const obj = JSON.parse(r.result);
+      const arr = Array.isArray(obj) ? obj : obj.attempts;
+      if (!Array.isArray(arr)) throw new Error('bad');
+      alogAll().then(existing => {
+        const seen = new Set(existing.map(x => x.qid + '|' + x.ts));
+        const adds = [];
+        arr.forEach(x => { if (x && x.qid && x.ts && !seen.has(x.qid + '|' + x.ts)) { const c = Object.assign({}, x); delete c.id; adds.push(alogAdd(c)); } });
+        Promise.all(adds).then(() => { alert('Restored ' + adds.length + ' answers.'); toggleSettingsModal(); });
+      });
+    } catch (e) { alert('That file is not a MedAide answer log.'); }
+    input.value = '';
+  };
+  r.readAsText(f);
+}
+alogOpen();
+
+
+// -------------------------------------------------------------
+// STRENGTH RATINGS (pedagogy step 2)
+// Every number is recomputed from the answer log, so changing the rules or the topic list never loses history.
+// -------------------------------------------------------------
+const ST_CFG = {
+  halfLifeDays: 30,          // an answer's weight halves every 30 days
+  priorWeight: 3,            // the starting estimate counts like 3 answers
+  defaultPrior: 50,          // used when the survey was skipped
+  repeatWindowDays: 3, repeatWeight: 0.3,   // same question again within 3 days counts 0.3
+  mode: { PRACTICE: 1, GRAND_TEST: 1, SRS: 0.8, RAPID_FIRE: 0.7, SEED: 0.5 },
+  extremeRight: 1.3, extremeWrong: 0.7,
+  why: { GUESS: { y: 0.5 }, MISREAD: { w: 0.5 }, CHANGED: { w: 0.7 }, SURE: { w: 1.2 } },
+  conf: [5, 15],             // evidence below 5 = low, 5-15 = medium, above 15 = high
+  bands: [50, 70, 85],       // Weak < 50 <= Developing < 70 <= Strong < 85 <= Mastered
+  masteryDays: 2,            // Mastered also needs right answers on 2 different days and at least medium confidence
+  survey: [['VW', 'Very weak', 30], ['W', 'Weak', 45], ['A', 'Average', 60], ['G', 'Good', 72], ['VS', 'Very strong', 85]]
+};
+const ST_BANDS = {
+  'Not started': 'bg-slate-100 text-slate-600 border-slate-200',
+  'Weak': 'bg-rose-50 text-rose-700 border-rose-200',
+  'Developing': 'bg-amber-50 text-amber-700 border-amber-200',
+  'Strong': 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  'Mastered': 'bg-indigo-50 text-indigo-700 border-indigo-200'
+};
+const ST_BAR = { 'Not started': 'bg-slate-300', 'Weak': 'bg-rose-500', 'Developing': 'bg-amber-500', 'Strong': 'bg-emerald-500', 'Mastered': 'bg-indigo-600' };
+const ST = { loading: null, open: {}, showHelp: false, showSurvey: false, last: null };
+
+function stEnsureTopics() {
+  if (window.TOPIC_DATA) return Promise.resolve(window.TOPIC_DATA);
+  if (ST.loading) return ST.loading;
+  ST.loading = new Promise(res => {
+    const s = document.createElement('script');
+    s.src = 'data/topics.js?v=20261118b';
+    s.onload = () => res(window.TOPIC_DATA || null);
+    s.onerror = () => { ST.loading = null; res(null); };
+    document.head.appendChild(s);
+  });
+  return ST.loading;
+}
+function stIndex(T) {
+  if (T._ix) return T._ix;
+  const byTopic = T.topics.map(() => []);
+  Object.keys(T.q).forEach(qid => { byTopic[T.q[qid][1]].push(qid); });
+  return (T._ix = { byTopic });
+}
+function stSurveyValue(code) { const b = ST_CFG.survey.find(x => x[0] === code); return b ? b[2] : null; }
+function stPrior(sid) {
+  const c = state.userData.confidence || {};
+  const v = stSurveyValue(c[sid]);
+  return v == null ? ST_CFG.defaultPrior : v;
+}
+function stBand(node) {
+  if (!node.attempts) return 'Not started';
+  const b = ST_CFG.bands;
+  if (node.p < b[0]) return 'Weak';
+  if (node.p < b[1]) return 'Developing';
+  if (node.p < b[2]) return 'Strong';
+  return (node.nEff >= ST_CFG.conf[0] && node.days >= ST_CFG.masteryDays) ? 'Mastered' : 'Strong';
+}
+function stConf(nEff) { return nEff < ST_CFG.conf[0] ? 'low' : nEff <= ST_CFG.conf[1] ? 'medium' : 'high'; }
+
+// Answers before the answer log existed (last result only) count as low-weight "seed" evidence.
+function stSeeds(log) {
+  const logged = new Set(log.map(r => r.qid));
+  const out = [];
+  const pr = state.userData.practice || {};
+  Object.keys(pr).forEach(qid => {
+    if (logged.has(qid)) return;
+    const t = Date.parse(pr[qid].d); if (!t) return;
+    out.push({ qid, ts: t, mode: 'SEED', correct: pr[qid].r === 'C', qtype: null, why: null });
+    logged.add(qid);
+  });
+  const mi = state.userData.mistakes || {};
+  Object.keys(mi).forEach(qid => {
+    if (logged.has(qid)) return;
+    const t = Date.parse(mi[qid].lastWrongDate); if (!t) return;
+    out.push({ qid, ts: t, mode: 'SEED', correct: false, qtype: (mi[qid].q || {}).question_type || null, why: null });
+  });
+  return out;
+}
+
+// One answer -> [weight, score]
+function stWeigh(r, now, lastSeen) {
+  const age = Math.max(0, (now - r.ts) / 864e5);
+  let w = Math.pow(0.5, age / ST_CFG.halfLifeDays) * (ST_CFG.mode[r.mode] != null ? ST_CFG.mode[r.mode] : 1);
+  let y = r.correct ? 1 : 0;
+  if (lastSeen != null && (r.ts - lastSeen) < ST_CFG.repeatWindowDays * 864e5) w *= ST_CFG.repeatWeight;
+  if (r.qtype === 'EXTREME') w *= r.correct ? ST_CFG.extremeRight : ST_CFG.extremeWrong;
+  const wy = r.why && ST_CFG.why[r.why];
+  if (wy) {
+    if (wy.y != null && r.correct) y = wy.y;
+    if (wy.w != null && !r.correct) w *= wy.w;
+  }
+  return [w, y];
+}
+
+async function stCompute(opts) {
+  opts = opts || {};
+  const T = await stEnsureTopics();
+  if (!T) return null;
+  const log = opts.log || await alogAll();
+  const now = opts.now || Date.now();
+  const all = log.concat(stSeeds(log)).filter(r => r && r.qid && r.ts).sort((a, b) => a.ts - b.ts);
+  const acc = {};
+  const get = k => acc[k] || (acc[k] = { sw: 0, swy: 0, attempts: 0, qs: new Set(), daysRight: new Set(), last: 0 });
+  const lastSeen = {}, lastResult = {};
+  all.forEach(r => {
+    const m = T.q[r.qid];
+    let sid, tKey = null, uKey = null, aKey = null;
+    if (m) {
+      const t = T.topics[m[1]]; sid = t[1];
+      tKey = 'T:' + t[0]; uKey = 'U:' + sid + ':' + t[2]; aKey = 'A:' + T.appUnits[m[0]][0];
+    } else sid = r.subject;
+    if (!sid) return;
+    const [w, y] = stWeigh(r, now, lastSeen[r.qid]);
+    lastSeen[r.qid] = r.ts; lastResult[r.qid] = { ok: !!r.correct, ts: r.ts };
+    const day = new Date(r.ts).toISOString().slice(0, 10);
+    ['S:' + sid, uKey, tKey, aKey].forEach(k => {
+      if (!k) return;
+      const a = get(k);
+      a.sw += w; a.swy += w * y; a.attempts++; a.qs.add(r.qid); a.last = Math.max(a.last, r.ts);
+      if (r.correct) a.daysRight.add(day);
+    });
+  });
+  const node = (k, priorP, total) => {
+    const a = acc[k] || { sw: 0, swy: 0, attempts: 0, qs: new Set(), daysRight: new Set(), last: 0 };
+    const k0 = ST_CFG.priorWeight;
+    const p = 100 * (k0 * priorP / 100 + a.swy) / (k0 + a.sw);
+    const n = { p: Math.round(p * 10) / 10, pr: p, prior: priorP, nEff: Math.round(a.sw * 10) / 10, conf: stConf(a.sw),
+      attempts: a.attempts, seen: a.qs.size, total: total, coverage: total ? a.qs.size / total : 0,
+      days: a.daysRight.size, last: a.last || null };
+    n.band = stBand(n);
+    return n;
+  };
+  const ix = stIndex(T);
+  const subjects = (state.curriculum && state.curriculum.subjects) || [];
+  const tree = subjects.map(s => {
+    const sid = s.subject_id;
+    const tps = T.topics.map((t, i) => ({ t, i })).filter(x => x.t[1] === sid);
+    const totalS = tps.reduce((n, x) => n + ix.byTopic[x.i].length, 0);
+    const S = node('S:' + sid, stPrior(sid), totalS);
+    S.id = sid; S.name = s.name; S.surveyed = !!(state.userData.confidence || {})[sid];
+    const unitCodes = Object.keys((T.units || {})[sid] || {});
+    tps.forEach(x => { if (unitCodes.indexOf(x.t[2]) < 0) unitCodes.push(x.t[2]); });
+    S.units = unitCodes.map(code => {
+      const ut = tps.filter(x => x.t[2] === code);
+      if (!ut.length) return null;
+      const U = node('U:' + sid + ':' + code, S.pr, ut.reduce((n, x) => n + ix.byTopic[x.i].length, 0));
+      U.code = code; U.name = ((T.units || {})[sid] || {})[code] || code;
+      U.topics = ut.map(x => { const N = node('T:' + x.t[0], U.pr, ix.byTopic[x.i].length); N.id = x.t[0]; N.name = x.t[3]; N.ti = x.i; return N; });
+      U.topicsStarted = U.topics.filter(t => t.attempts).length;
+      return U;
+    }).filter(Boolean);
+    S.topicsTotal = tps.length; S.topicsStarted = S.units.reduce((n, u) => n + u.topicsStarted, 0);
+    S.appUnits = (s.units || []).map(u => { const N = node('A:' + u.unit_id, S.pr, u.total_questions || 0); N.id = u.unit_id; N.name = u.title; return N; });
+    return S;
+  });
+  const res = { computedAt: now, answers: all.length, version: T.version, subjects: tree, lastResult: lastResult };
+  ST.last = res;
+  return res;
+}
+
+// ---- revision picker (used by Revision GT, Revision drill and the Daily Target) ----
+// opts: { count, mix: {W,D,N,S,M} (relative weights per band), subjects: [ids] or null, types: [0,1,2] or null,
+//         avoidCorrectDays: 7, includeUnsorted: false }
+// Topics are grouped by band (Weak, Developing, Not started, Strong, Mastered); the test is split across bands by the mix.
+// Empty bands hand their share to the others. Inside Weak/Developing, weaker topics are picked more often.
+const RV_DEFAULT_MIX = { W: 40, D: 30, N: 15, S: 10, M: 5 };
+const RV_BANDKEY = { 'Weak': 'W', 'Developing': 'D', 'Not started': 'N', 'Strong': 'S', 'Mastered': 'M' };
+function rvPrefs() {
+  const p = state.userData.revPrefs || {};
+  return { mix: Object.assign({}, RV_DEFAULT_MIX, p.mix || {}), customCount: p.customCount || 50,
+    customMinPerQ: p.customMinPerQ || 1.05, customSubjects: Array.isArray(p.customSubjects) && p.customSubjects.length ? p.customSubjects : null };
+}
+async function stPickRevision(opts) {
+  opts = Object.assign({ count: 50, mix: null, subjects: null, types: null, avoidCorrectDays: 7, includeUnsorted: false, exclude: null }, opts || {});
+  const mix = opts.mix || rvPrefs().mix;
+  const R = await stCompute();
+  if (!R) return [];
+  const T = window.TOPIC_DATA, ix = stIndex(T), now = Date.now();
+  const pools = { W: [], D: [], N: [], S: [], M: [] };
+  R.subjects.forEach(s => {
+    if (opts.subjects && opts.subjects.indexOf(s.id) < 0) return;
+    s.units.forEach(u => u.topics.forEach(t => {
+      if (t.total && (opts.includeUnsorted || !/-UNSORTED$/.test(t.id))) pools[RV_BANDKEY[t.band]].push(t);
+    }));
+  });
+  const used = new Set(opts.exclude || []);
+  const okQ = q => {
+    if (used.has(q)) return false;
+    if (opts.types && opts.types.indexOf(T.q[q][2]) < 0) return false;
+    const lr = R.lastResult[q];
+    return !(lr && lr.ok && now - lr.ts < opts.avoidCorrectDays * 864e5);
+  };
+  const pickFrom = (pool, n, weakSide) => {
+    pool = pool.slice(); const out = [];
+    let guard = n * 30;
+    while (out.length < n && pool.length && guard-- > 0) {
+      const ws = pool.map(t => (weakSide ? (1 - t.p / 100) + 0.05 : 1) * Math.sqrt(t.total));
+      let r = Math.random() * ws.reduce((a, b) => a + b, 0), i = 0;
+      while (r > ws[i] && i < ws.length - 1) { r -= ws[i]; i++; }
+      const cand = ix.byTopic[pool[i].ti].filter(okQ);
+      if (!cand.length) { pool.splice(i, 1); continue; }
+      const wrong = cand.filter(q => R.lastResult[q] && !R.lastResult[q].ok);
+      const unseen = cand.filter(q => !R.lastResult[q]);
+      const src = wrong.length && Math.random() < 0.5 ? wrong : unseen.length ? unseen : cand;
+      const q = src[Math.floor(Math.random() * src.length)];
+      used.add(q); out.push(q);
+    }
+    return out;
+  };
+  // split the count across non-empty bands by the mix (largest remainder)
+  const keys = Object.keys(pools).filter(k => pools[k].length && (mix[k] || 0) > 0);
+  const tot = keys.reduce((n, k) => n + mix[k], 0);
+  let picked = [];
+  if (tot > 0) {
+    const raw = keys.map(k => [k, opts.count * mix[k] / tot]);
+    const alloc = {}; let given = 0;
+    raw.forEach(([k, v]) => { alloc[k] = Math.floor(v); given += alloc[k]; });
+    raw.sort((a, b) => (b[1] % 1) - (a[1] % 1)).forEach(([k]) => { if (given < opts.count) { alloc[k]++; given++; } });
+    keys.forEach(k => { picked = picked.concat(pickFrom(pools[k], alloc[k], k === 'W' || k === 'D')); });
+  }
+  // top up from any band if some bands ran dry
+  ['W', 'D', 'N', 'S', 'M'].forEach(k => { if (picked.length < opts.count) picked = picked.concat(pickFrom(pools[k], opts.count - picked.length, k === 'W' || k === 'D')); });
+  return shuffleArray(picked);
+}
+
+// ---- starting-confidence survey ----
+function stSetConfidence(sid, code) {
+  if (!state.userData.confidence || typeof state.userData.confidence !== 'object') state.userData.confidence = {};
+  state.userData.confidence[sid] = code;
+  state.userData.confidenceDate = new Date().toISOString();
+  saveUserData();
+  renderStrengthsView();
+}
+function stSkipSurvey() {
+  if (!state.userData.confidence || typeof state.userData.confidence !== 'object') state.userData.confidence = {};
+  state.userData.confidence._skipped = new Date().toISOString();
+  ST.showSurvey = false; saveUserData(); renderStrengthsView();
+}
+function stToggle(k) { ST.open[k] = !ST.open[k]; renderStrengthsView(); }
+function stToggleHelp() { ST.showHelp = !ST.showHelp; renderStrengthsView(); }
+function stToggleSurvey() { ST.showSurvey = !ST.showSurvey; renderStrengthsView(); }
+
+function stChip(n) {
+  return '<span class="inline-block px-2 py-0.5 rounded-full border text-[10px] font-bold ' + ST_BANDS[n.band] + '">' + n.band + '</span>';
+}
+function stBarHtml(n) {
+  return '<div class="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden"><div class="h-full ' + ST_BAR[n.band] + '" style="width:' + Math.max(2, Math.min(100, n.p)) + '%"></div></div>';
+}
+function stMeta(n) {
+  if (!n.attempts) return 'No answers yet · starting estimate';
+  return n.seen + ' of ' + n.total + ' questions seen · ' + n.attempts + ' answers · ' + n.conf + ' confidence';
+}
+function stSurveyHtml(subjects) {
+  const c = state.userData.confidence || {};
+  let h = '<div class="bg-white border border-indigo-200 rounded-2xl p-4 sm:p-5 space-y-3">' +
+    '<div><div class="font-bold text-slate-900 text-sm">How confident are you in each subject?</div>' +
+    '<p class="text-xs text-slate-500 mt-1 leading-relaxed">This sets your starting point. Your answers take over as you practise; you can change this any time.</p></div><div class="space-y-2.5">';
+  subjects.forEach(s => {
+    h += '<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5"><div class="text-xs font-semibold text-slate-800">' + pgEsc(s.name) + '</div><div class="flex flex-wrap gap-1">';
+    ST_CFG.survey.forEach(b => {
+      const on = c[s.id] === b[0];
+      h += '<button type="button" onclick="stSetConfidence(\'' + s.id + '\',\'' + b[0] + '\')" class="px-2 py-1 rounded-lg border text-[11px] font-semibold ' +
+        (on ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100') + '">' + b[1] + '</button>';
+    });
+    h += '</div></div>';
+  });
+  h += '</div><div class="flex justify-end gap-2 pt-1"><button type="button" onclick="stSkipSurvey()" class="px-3 py-1.5 rounded-lg border border-slate-300 text-xs font-semibold text-slate-600 hover:bg-slate-100">Done</button></div></div>';
+  return h;
+}
+function stHelpHtml() {
+  const c = ST_CFG, sv = c.survey.map(b => b[1] + ' ' + b[2] + '%').join(', ');
+  return '<div class="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 text-xs text-slate-700 leading-relaxed space-y-2.5">' +
+    '<div class="font-bold text-slate-900 text-sm">How your strength number is calculated</div>' +
+    '<p><b>Strength</b> is your estimated chance of getting a question right in that subject, unit or topic, from 0 to 100. It is worked out on this device from every answer you have given, every time you open this page.</p>' +
+    '<p><b>Starting point.</b> Before you answer anything, each subject starts from your survey choice (' + sv + '; ' + c.defaultPrior + '% if you skipped it). This starting point counts as much as ' + c.priorWeight + ' answers, so real answers soon outweigh it. A unit starts from its subject\'s strength and a topic from its unit\'s.</p>' +
+    '<p><b>Formula.</b> Strength = (' + c.priorWeight + ' × starting point + weighted right answers) ÷ (' + c.priorWeight + ' + weighted answers).</p>' +
+    '<p><b>How much each answer counts:</b></p><ul class="list-disc pl-5 space-y-1">' +
+    '<li>Recent answers count more: an answer\'s weight halves every ' + c.halfLifeDays + ' days.</li>' +
+    '<li>Practice and Grand Tests count fully; Spaced Review ' + c.mode.SRS + '; Rapid Fire ' + c.mode.RAPID_FIRE + '; answers saved before the answer log existed ' + c.mode.SEED + '.</li>' +
+    '<li>Seeing the same question again within ' + c.repeatWindowDays + ' days counts only ' + c.repeatWeight + ' (you may remember the answer).</li>' +
+    '<li>Extreme questions: right counts ' + c.extremeRight + ', wrong counts ' + c.extremeWrong + '.</li>' +
+    '<li>If you use "Why did I miss this": a right answer you guessed counts as half right; a wrong answer from misreading counts ' + c.why.MISREAD.w + ', from changing the right answer ' + c.why.CHANGED.w + ', and "sure but wrong" counts ' + c.why.SURE.w + '.</li></ul>' +
+    '<p><b>Bands:</b> Weak below ' + c.bands[0] + ', Developing ' + c.bands[0] + '–' + c.bands[1] + ', Strong ' + c.bands[1] + '–' + c.bands[2] + ', Mastered ' + c.bands[2] + ' and above (Mastered also needs at least medium confidence and right answers on ' + c.masteryDays + ' different days).</p>' +
+    '<p><b>Confidence</b> shows how much evidence there is: low under ' + c.conf[0] + ' weighted answers, medium ' + c.conf[0] + '–' + c.conf[1] + ', high above ' + c.conf[1] + '. <b>Coverage</b> is how many of that topic\'s questions you have seen.</p>' +
+    '<p class="text-slate-500">Topics are provisional (based on standard textbooks) until the faculty review is finished. Your history is kept, so numbers will simply be recalculated when the topic list changes.</p></div>';
+}
+async function renderStrengthsView() {
+  const box = document.getElementById('strengths-container');
+  if (!box) return;
+  if (!state.userData.plan && !state.userData.planSkipped && !ST._autoSurvey) { ST._autoSurvey = true; setTimeout(planOpen, 0); }
+  box.innerHTML = '<div class="text-sm text-slate-500 p-4">Working out your strengths…</div>';
+  const R = await stCompute();
+  if (!R) { box.innerHTML = '<div class="text-sm text-rose-600 p-4">Could not load the topic list. Check your connection and try again.</div>'; return; }
+  let h = '<div class="flex flex-wrap gap-2">' +
+    '<button type="button" onclick="stToggleSurvey()" class="px-3 py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-100">Starting confidence survey</button>' +
+    '<button type="button" onclick="stToggleHelp()" class="px-3 py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-100">How is this calculated?</button>' +
+    '<span class="text-[11px] text-slate-500 self-center">' + R.answers + ' answers used</span></div>';
+  if (ST.showSurvey) h += stSurveyHtml(R.subjects);
+  if (ST.showHelp) h += stHelpHtml();
+  h += '<div class="grid grid-cols-1 lg:grid-cols-2 gap-3">';
+  R.subjects.forEach(s => {
+    const k = 'S:' + s.id;
+    h += '<div class="bg-white border border-slate-200 rounded-2xl p-4 space-y-2">' +
+      '<button type="button" onclick="stToggle(\'' + k + '\')" class="w-full text-left space-y-2">' +
+      '<div class="flex items-center justify-between gap-3"><div class="min-w-0"><div class="font-bold text-slate-900 text-sm truncate">' + pgEsc(s.name) + '</div>' +
+      '<div class="text-[11px] text-slate-500">' + stMeta(s) + ' · ' + s.topicsStarted + '/' + s.topicsTotal + ' topics started</div></div>' +
+      '<div class="text-right shrink-0"><div class="text-xl font-extrabold text-slate-900">' + Math.round(s.p) + '</div>' + stChip(s) + '</div></div>' + stBarHtml(s) + '</button>';
+    if (ST.open[k]) {
+      h += '<div class="pt-2 space-y-2 border-t border-slate-100">';
+      s.units.forEach(u => {
+        const uk = 'U:' + s.id + ':' + u.code;
+        h += '<div class="rounded-xl bg-slate-50 border border-slate-200 p-3"><button type="button" onclick="stToggle(\'' + uk + '\')" class="w-full text-left space-y-1.5">' +
+          '<div class="flex items-center justify-between gap-3"><div class="min-w-0"><div class="text-xs font-bold text-slate-800">' + pgEsc(u.name) + '</div>' +
+          '<div class="text-[10px] text-slate-500">' + stMeta(u) + ' · ' + u.topicsStarted + '/' + u.topics.length + ' topics started</div></div>' +
+          '<div class="text-right shrink-0"><div class="text-base font-extrabold text-slate-800">' + Math.round(u.p) + '</div>' + stChip(u) + '</div></div>' + stBarHtml(u) + '</button>';
+        if (ST.open[uk]) {
+          h += '<div class="mt-2 space-y-1.5">';
+          u.topics.forEach(t => {
+            h += '<div class="bg-white rounded-lg border border-slate-200 p-2.5 space-y-1"><div class="flex items-center justify-between gap-3"><div class="min-w-0">' +
+              '<div class="text-[11px] font-semibold text-slate-800">' + pgEsc(t.name) + '</div><div class="text-[10px] text-slate-500">' + stMeta(t) + '</div></div>' +
+              '<div class="text-right shrink-0"><div class="text-sm font-extrabold text-slate-800">' + Math.round(t.p) + '</div>' + stChip(t) + '</div></div>' + stBarHtml(t) + '</div>';
+          });
+          h += '</div>';
+        }
+        h += '</div>';
+      });
+      h += '</div>';
+    }
+    h += '</div>';
+  });
+  h += '</div>';
+  box.innerHTML = h;
+}
+
+
+// -------------------------------------------------------------
+// STUDY PLAN, DAILY TARGET, REVISION TESTS (pedagogy step 3)
+// -------------------------------------------------------------
+const PL_DAY = 864e5;
+function plDayKey(d) { const x = new Date(d); return x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0'); }
+function plParse(k) { const p = String(k).split('-').map(Number); return new Date(p[0], p[1] - 1, p[2]); }
+function plDaysBetween(a, b) { return Math.round((plParse(b) - plParse(a)) / PL_DAY); }
+function plAddDays(k, n) { const d = plParse(k); d.setDate(d.getDate() + n); return plDayKey(d); }
+function plFmt(k) { return plParse(k).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }); }
+function plMonthsToDays(m) { return Math.max(1, Math.round(m * 30.44)); }
+function plBlockName(b) { return (b.type === 'S' ? 'Study cycle ' : 'Revision cycle ') + b.n; }
+const PL_ORDER = ['ANATOMY', 'PHYSIOLOGY', 'BIOCHEMISTRY', 'PATHOLOGY', 'PHARMACOLOGY', 'MICROBIOLOGY', 'FMT', 'PSM', 'OPHTHALMOLOGY', 'ENT',
+  'MEDICINE', 'SURGERY', 'OBGY', 'PEDIATRICS', 'ORTHOPEDICS', 'DERMATOLOGY', 'PSYCHIATRY', 'RADIOLOGY', 'ANESTHESIOLOGY'];
+function plSubjectName(id) { const s = (state.curriculum.subjects || []).find(x => x.subject_id === id); return s ? s.name : id; }
+function plBankCounts() {
+  const c = { pyq: 0, add: 0, bySubject: {} };
+  (state.curriculum.subjects || []).forEach(s => {
+    let p = 0, a = 0;
+    s.units.forEach(u => { const k = u.counts || {}; p += k.PYQ || 0; a += k.PRACTICE || 0; });
+    c.pyq += p; c.add += a; c.bySubject[s.subject_id] = { pyq: p, add: a };
+  });
+  return c;
+}
+
+// ---- plan geometry: each block gets [startDay, endDay) as day offsets from plan.start ----
+function plLayout(plan) {
+  let d = 0;
+  return plan.blocks.map(b => { const days = b.days || plMonthsToDays(b.months); const r = Object.assign({}, b, { from: d, to: d + days, days }); d += days; return r; });
+}
+function plTargetFor(b) { return (b.pyq || 0) + (b.add || 0) + (b.rev || 0); }
+function plExpectedThrough(plan, dayIdx) {
+  if (dayIdx < 0) return 0;
+  let n = 0;
+  plLayout(plan).forEach(b => { const last = Math.min(dayIdx, b.to - 1); if (last >= b.from) n += (last - b.from + 1) * plTargetFor(b); });
+  return n;
+}
+function plBlockAt(plan, dayIdx) { return plLayout(plan).find(b => dayIdx >= b.from && dayIdx < b.to) || null; }
+// study block: which subject is scheduled on a given day (days split by each subject's question count)
+function plSubjectSchedule(plan, b) {
+  const order = (plan.subjectOrder && plan.subjectOrder.length ? plan.subjectOrder : PL_ORDER);
+  const bank = plBankCounts().bySubject;
+  const w = order.map(id => (bank[id] ? bank[id].pyq + bank[id].add : 0));
+  const tot = w.reduce((a, x) => a + x, 0) || 1;
+  let acc = 0;
+  return order.map((id, i) => { const from = b.from + Math.round(b.days * acc / tot); acc += w[i]; const to = b.from + Math.round(b.days * acc / tot); return { id, from, to }; });
+}
+
+// ---- progress from the answer log ----
+async function plProgress() {
+  const plan = state.userData.plan;
+  if (!plan) return null;
+  const log = await alogAll();
+  const today = plDayKey(Date.now());
+  const dayIdx = plDaysBetween(plan.start, today);
+  const daily = log.filter(r => r.daily);
+  const done = daily.length;
+  const todayRecs = daily.filter(r => r.daily === today);
+  const doneToday = { PYQ: 0, ADD: 0, REV: 0 };
+  todayRecs.forEach(r => { if (doneToday[r.part] != null) doneToday[r.part]++; });
+  const lay = plLayout(plan);
+  const end = lay.length ? lay[lay.length - 1].to : 0;
+  const b = plBlockAt(plan, dayIdx);
+  const tgt = b ? { PYQ: b.pyq || 0, ADD: b.add || 0, REV: b.rev || 0 } : { PYQ: 0, ADD: 0, REV: 0 };
+  const todayTarget = tgt.PYQ + tgt.ADD + tgt.REV;
+  const expYesterday = plExpectedThrough(plan, Math.min(dayIdx - 1, end - 1));
+  const expToday = plExpectedThrough(plan, Math.min(dayIdx, end - 1));
+  const backlog = Math.max(0, expYesterday - done);
+  let status, msg;
+  if (dayIdx < 0) { status = 'orange'; msg = 'Your plan starts on ' + plFmt(plan.start) + '.'; }
+  else if (backlog > Math.max(1, 0.1 * (todayTarget || 1))) {
+    status = 'red';
+    const days = todayTarget ? (backlog / todayTarget).toFixed(1) : '';
+    msg = 'You are behind by ' + backlog + ' questions' + (days ? ' (about ' + days + ' days of targets)' : '') + '. Use Catch up to close the gap.';
+  } else if (done > expToday) {
+    status = 'green';
+    const ahead = done - expToday;
+    msg = 'You are ahead of schedule by ' + ahead + ' questions' + (todayTarget ? ' (about ' + (ahead / todayTarget).toFixed(1) + ' days)' : '') + '.';
+  } else {
+    status = 'orange';
+    const left = Math.max(0, expToday - done);
+    msg = left ? 'You are on time. ' + left + ' questions left for today.' : 'You are on time and today\'s target is done.';
+  }
+  return { plan, today, dayIdx, block: b, end, done, doneToday, tgt, todayTarget, expYesterday, expToday, backlog, status, msg,
+    daysLeft: Math.max(0, plDaysBetween(today, plan.target)) };
+}
+
+let DT_REFRESH = null;
+function dtRefreshLight() {
+  clearTimeout(DT_REFRESH);
+  DT_REFRESH = setTimeout(async () => {
+    const el = document.getElementById('dt-light');
+    if (!el) return;
+    const P = await plProgress();
+    el.className = 'dt-light ' + (P ? 'dt-' + P.status : 'dt-none');
+    el.title = P ? P.msg : 'Set up your study plan';
+  }, 150);
+}
+
+// ---- choosing questions ----
+function dtFreshSince(log, sinceTs) { const s = new Set(); log.forEach(r => { if (r.ts >= sinceTs) s.add(r.qid); }); return s; }
+async function dtStudyQuestions(P, need, log) {
+  // need: { PYQ: n, ADD: n } ; serves the scheduled subject first, then the next subjects in the plan order
+  const T = await stEnsureTopics();
+  const plan = P.plan, b = P.block;
+  const sched = plSubjectSchedule(plan, b);
+  let cur = sched.findIndex(x => P.dayIdx >= x.from && P.dayIdx < x.to);
+  if (cur < 0) cur = 0;
+  const seen = dtFreshSince(log, plParse(plAddDays(plan.start, b.from)).getTime());
+  const out = { PYQ: [], ADD: [] };
+  const typeOf = { PYQ: 0, ADD: 1 };
+  const bySubject = {};
+  Object.keys(T.q).forEach(qid => { const m = T.q[qid]; const sid = T.topics[m[1]][1]; (bySubject[sid] || (bySubject[sid] = [])).push(qid); });
+  ['PYQ', 'ADD'].forEach(part => {
+    for (let k = 0; k < sched.length && out[part].length < need[part]; k++) {
+      const sid = sched[(cur + k) % sched.length].id;
+      (bySubject[sid] || []).forEach(qid => { if (out[part].length < need[part] && T.q[qid][2] === typeOf[part] && !seen.has(qid)) out[part].push(qid); });
+    }
+  });
+  return { list: out, subject: sched[cur] ? sched[cur].id : null };
+}
+async function dtBuildSession(P, catchUp) {
+  const log = await alogAll();
+  const b = P.block;
+  let need;
+  if (catchUp) {
+    const t = P.todayTarget || 1, n = P.backlog;
+    need = { PYQ: Math.round(n * P.tgt.PYQ / t), ADD: Math.round(n * P.tgt.ADD / t) };
+    need.REV = Math.max(0, n - need.PYQ - need.ADD);
+  } else {
+    need = { PYQ: Math.max(0, P.tgt.PYQ - P.doneToday.PYQ), ADD: Math.max(0, P.tgt.ADD - P.doneToday.ADD), REV: Math.max(0, P.tgt.REV - P.doneToday.REV) };
+  }
+  let study = { list: { PYQ: [], ADD: [] }, subject: null };
+  if (b && b.type === 'S' && (need.PYQ || need.ADD)) study = await dtStudyQuestions(P, need, log);
+  else if (b && (need.PYQ || need.ADD)) {
+    // revision cycle: PYQ / Additional quotas are filled with revision picks of that type
+    study.list.PYQ = need.PYQ ? await stPickRevision({ count: need.PYQ, types: [0] }) : [];
+    study.list.ADD = need.ADD ? await stPickRevision({ count: need.ADD, types: [1], exclude: study.list.PYQ }) : [];
+  }
+  let revSubjects = null;
+  if (b && b.type === 'S') {
+    // in study cycles, revise only subjects already reached in the plan
+    const earlierStudy = plLayout(P.plan).some(x => x.type === 'S' && x.to <= b.from);
+    if (!earlierStudy) { const sched = plSubjectSchedule(P.plan, b); revSubjects = sched.filter(x => x.from <= P.dayIdx).map(x => x.id); }
+  }
+  const exclude = study.list.PYQ.concat(study.list.ADD);
+  const rev = need.REV ? await stPickRevision({ count: need.REV, subjects: revSubjects, types: [0, 1], exclude }) : [];
+  const part = {};
+  study.list.PYQ.forEach(q => part[q] = 'PYQ'); study.list.ADD.forEach(q => part[q] = 'ADD'); rev.forEach(q => part[q] = 'REV');
+  return { ids: study.list.PYQ.concat(study.list.ADD, rev), part, subject: study.subject, need };
+}
+async function dtLaunchIds(ids, title, subtitle, ctx) {
+  const T = await stEnsureTopics();
+  const sids = [...new Set(ids.map(q => T.q[q] ? T.topics[T.q[q][1]][1] : null).filter(Boolean))];
+  if (!(await ensureSubjects(sids))) return;
+  const qs = ids.map(id => findQuestionById(id)).filter(Boolean);
+  if (!qs.length) { alert('No questions available for this session.'); return; }
+  state.rfList = qs; state.rfTitle = title; state.rfSubtitle = subtitle; state.rfListCtx = ctx || null;
+  launchRapidFireNow('LIST');
+}
+
+// ---- Daily Target tab ----
+async function dtOpen() {
+  if (!state.userData.plan) { planOpen(); return; }
+  const P = await plProgress();
+  if (!P.block) { dtShowStatus(); return; }
+  const left = Math.max(0, P.todayTarget - P.doneToday.PYQ - P.doneToday.ADD - P.doneToday.REV);
+  if (!left) { dtShowStatus(); return; }
+  const S = await dtBuildSession(P, false);
+  if (!S.ids.length) { dtShowStatus('No new questions left for this plan step. Try Catch up or a revision drill.'); return; }
+  const sub = plBlockName(P.block) + (S.subject ? ' · ' + plSubjectName(S.subject) : '') + ' · ' + S.ids.length + ' questions left today';
+  dtLaunchIds(S.ids, '🎯 Daily Target', sub, { day: P.today, part: S.part });
+}
+async function dtCatchUp() {
+  const P = await plProgress();
+  if (!P || !P.backlog) return;
+  dtCloseStatus();
+  const S = await dtBuildSession(P, true);
+  dtLaunchIds(S.ids, '🎯 Catch up', S.ids.length + ' backlog questions', { day: P.today, part: S.part });
+}
+function dtCloseStatus() { const m = document.getElementById('dt-modal'); if (m) m.classList.add('hidden'); }
+async function dtShowStatus(note) {
+  const m = document.getElementById('dt-modal'), body = document.getElementById('dt-modal-body');
+  if (!m || !body) return;
+  const P = await plProgress();
+  if (!P) { planOpen(); return; }
+  const col = { red: 'bg-rose-50 border-rose-200 text-rose-800', orange: 'bg-amber-50 border-amber-200 text-amber-800', green: 'bg-emerald-50 border-emerald-200 text-emerald-800' }[P.status];
+  const word = { red: 'Behind schedule', orange: 'On time', green: 'Ahead of schedule' }[P.status];
+  const b = P.block;
+  let h = '<div class="rounded-xl border p-3 ' + col + '"><div class="flex items-center gap-2 font-bold text-sm"><span class="dt-light dt-' + P.status + '"></span>' + word + '</div><p class="text-xs mt-1 leading-relaxed">' + P.msg + '</p></div>';
+  if (note) h += '<p class="text-xs text-slate-600">' + pgEsc(note) + '</p>';
+  h += '<div class="grid grid-cols-2 gap-2 text-xs">' +
+    '<div class="bg-slate-50 rounded-lg p-2.5"><div class="text-slate-500">Now</div><div class="font-bold text-slate-900">' + (b ? plBlockName(b) + ', day ' + (P.dayIdx - b.from + 1) + ' of ' + b.days : (P.dayIdx < 0 ? 'Not started' : 'Plan finished')) + '</div></div>' +
+    '<div class="bg-slate-50 rounded-lg p-2.5"><div class="text-slate-500">Target date</div><div class="font-bold text-slate-900">' + plFmt(P.plan.target) + ' (' + P.daysLeft + ' days)</div></div>' +
+    '<div class="bg-slate-50 rounded-lg p-2.5"><div class="text-slate-500">Today</div><div class="font-bold text-slate-900">' + (P.doneToday.PYQ + P.doneToday.ADD + P.doneToday.REV) + ' / ' + P.todayTarget + '</div><div class="text-[10px] text-slate-500">PYQ ' + P.doneToday.PYQ + '/' + P.tgt.PYQ + ' · Additional ' + P.doneToday.ADD + '/' + P.tgt.ADD + ' · Revision ' + P.doneToday.REV + '/' + P.tgt.REV + '</div></div>' +
+    '<div class="bg-slate-50 rounded-lg p-2.5"><div class="text-slate-500">Plan total so far</div><div class="font-bold text-slate-900">' + P.done + ' done / ' + P.expToday + ' due</div></div></div>';
+  h += '<div class="flex flex-wrap gap-2">';
+  const left = P.todayTarget - P.doneToday.PYQ - P.doneToday.ADD - P.doneToday.REV;
+  if (P.block && left > 0) h += '<button onclick="dtCloseStatus(); dtOpen()" class="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold">Start today\'s questions</button>';
+  if (P.backlog) h += '<button onclick="dtCatchUp()" class="px-3 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold">Catch up ' + P.backlog + '</button>';
+  h += '<button onclick="dtCloseStatus(); planOpen()" class="px-3 py-2 border border-slate-300 hover:bg-slate-100 text-slate-700 rounded-lg text-xs font-semibold">Edit plan</button></div>';
+  h += '<p class="text-[11px] text-slate-500 leading-relaxed">Green = ahead, orange = on time, red = behind. Only questions answered from the Daily Target (or Catch up) count towards the plan.</p>';
+  body.innerHTML = h;
+  m.classList.remove('hidden');
+}
+
+// ---- revision tests ----
+function rvTypes() { return [state.questionFilter === 'ADDITIONAL' ? 1 : state.questionFilter === 'EXTREME' ? 2 : 0]; }
+function rvTypeName() { return state.questionFilter === 'ADDITIONAL' ? 'Additional' : state.questionFilter === 'EXTREME' ? 'Extreme' : 'PYQ'; }
+async function rvStartGT(kind) {
+  const pr = rvPrefs();
+  const cfgs = {
+    FULL: { name: 'Revision Grand Test (NEET pattern)', count: 200, durationMins: 210, pos: 4, neg: 1, maxMarks: 800 },
+    MINI: { name: 'Revision Mini-GT', count: 50, durationMins: 50, pos: 4, neg: 1, maxMarks: 200 }
+  };
+  let cfg = cfgs[kind], subjects = null;
+  if (kind === 'CUSTOM') {
+    const n = Math.max(5, Math.min(300, pr.customCount));
+    cfg = { name: 'Custom Revision Test', count: n, durationMins: Math.max(1, Math.round(n * pr.customMinPerQ)), pos: 4, neg: 1, maxMarks: n * 4 };
+    subjects = pr.customSubjects;
+  }
+  if (!(await ensureSubjects(subjects || allSubjectIds()))) return;
+  const ids = await stPickRevision({ count: cfg.count, subjects, types: rvTypes() });
+  if (!ids.length) { alert('No ' + rvTypeName() + ' questions available for a revision test.'); return; }
+  state.gtPresetCfg = cfg;
+  state.gtPresetList = ids.map(id => { const q = findQuestionById(id); return q ? Object.assign({}, q, { subject_name: plSubjectName(q.subject_id) }) : null; }).filter(Boolean);
+  startGrandTestNow('PRESET');
+}
+async function rvStartDrill() {
+  const ids = await stPickRevision({ count: 100, types: rvTypes() });
+  if (!ids.length) { alert('No ' + rvTypeName() + ' questions available for a revision drill.'); return; }
+  dtLaunchIds(ids, '⚡ Revision Drill', ids.length + ' ' + rvTypeName() + ' questions weighted to your weak areas • End anytime', null);
+}
+function rvCustomSummary() {
+  const p = rvPrefs();
+  return p.customCount + ' questions · ' + Math.round(p.customCount * p.customMinPerQ) + ' min · ' + (p.customSubjects ? p.customSubjects.length + ' subjects' : 'all subjects');
+}
+
+// ---- Settings: revision mix + custom test ----
+const RV_LABELS = [['W', 'Weak'], ['D', 'Developing'], ['N', 'Not started'], ['S', 'Strong'], ['M', 'Mastered']];
+function rvSave(p) { state.userData.revPrefs = Object.assign({}, state.userData.revPrefs || {}, p); saveUserData(); }
+function rvSetMix(k, v) { const m = rvPrefs().mix; m[k] = Number(v); rvSave({ mix: m }); rvMixLabels(); }
+function rvResetMix() { rvSave({ mix: Object.assign({}, RV_DEFAULT_MIX) }); rvRenderSettings(); }
+function rvMixLabels() {
+  const m = rvPrefs().mix, tot = RV_LABELS.reduce((n, x) => n + (m[x[0]] || 0), 0) || 1;
+  RV_LABELS.forEach(x => { const el = document.getElementById('rv-pct-' + x[0]); if (el) el.textContent = Math.round(100 * (m[x[0]] || 0) / tot) + '%'; });
+}
+function rvToggleSubject(id) {
+  const p = rvPrefs(); let s = p.customSubjects ? p.customSubjects.slice() : allSubjectIds();
+  s = s.indexOf(id) >= 0 ? s.filter(x => x !== id) : s.concat([id]);
+  rvSave({ customSubjects: s.length === allSubjectIds().length ? null : s }); rvRenderSettings();
+}
+function rvRenderSettings() {
+  const box = document.getElementById('settings-extra');
+  if (!box) return;
+  const p = rvPrefs();
+  let h = '<div class="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-3"><div class="flex items-center justify-between"><div class="text-xs font-bold text-slate-800">Revision mix</div>' +
+    '<button onclick="rvResetMix()" class="text-[11px] text-indigo-600 underline">Reset to default</button></div>' +
+    '<p class="text-xs text-slate-600 leading-relaxed">How revision tests, revision drills and daily revision questions are shared across your strength bands. Move the sliders; the percentages always add up to 100.</p>';
+  RV_LABELS.forEach(x => {
+    h += '<div><div class="flex justify-between text-[11px] font-semibold text-slate-700"><span>' + x[1] + '</span><span id="rv-pct-' + x[0] + '"></span></div>' +
+      '<input type="range" min="0" max="100" step="5" value="' + (p.mix[x[0]] || 0) + '" oninput="rvSetMix(\'' + x[0] + '\', this.value)" class="w-full accent-indigo-600"></div>';
+  });
+  h += '</div><div class="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-3"><div class="text-xs font-bold text-slate-800">Custom revision test</div>' +
+    '<div class="grid grid-cols-2 gap-2"><label class="text-[11px] font-semibold text-slate-700">Questions<input type="number" min="5" max="300" value="' + p.customCount + '" onchange="rvSave({customCount: Math.max(5, Math.min(300, Number(this.value) || 50))}); rvRenderSettings()" class="mt-1 w-full border border-slate-300 rounded-lg px-2 py-1.5 text-sm"></label>' +
+    '<label class="text-[11px] font-semibold text-slate-700">Minutes per question<input type="number" min="0.3" max="5" step="0.05" value="' + p.customMinPerQ + '" onchange="rvSave({customMinPerQ: Math.max(0.3, Math.min(5, Number(this.value) || 1.05))}); rvRenderSettings()" class="mt-1 w-full border border-slate-300 rounded-lg px-2 py-1.5 text-sm"></label></div>' +
+    '<div class="text-[11px] text-slate-600">' + rvCustomSummary() + '</div><div class="flex flex-wrap gap-1">';
+  (state.curriculum.subjects || []).forEach(s => {
+    const on = !p.customSubjects || p.customSubjects.indexOf(s.subject_id) >= 0;
+    h += '<button onclick="rvToggleSubject(\'' + s.subject_id + '\')" class="px-2 py-1 rounded-lg border text-[10px] font-semibold ' + (on ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-500 border-slate-300') + '">' + pgEsc(s.name) + '</button>';
+  });
+  h += '</div></div><div class="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-2"><div class="text-xs font-bold text-slate-800">Study plan</div><p class="text-xs text-slate-600">' +
+    (state.userData.plan ? 'Target ' + plFmt(state.userData.plan.target) + ' · ' + state.userData.plan.blocks.map(plBlockName).join(' → ') : 'No plan yet.') + '</p>' +
+    '<button onclick="toggleSettingsModal(); planOpen()" class="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold">' + (state.userData.plan ? 'Edit study plan' : 'Set up study plan') + '</button></div>';
+  box.innerHTML = h;
+  rvMixLabels();
+}
+
+// ---- plan wizard ----
+const PW = { step: 0, d: null };
+function planDefaults() {
+  const today = plDayKey(Date.now());
+  return { start: today, target: plAddDays(today, 304), nS: 2, nR: 2, blocks: null, subjectOrder: PL_ORDER.filter(id => (state.curriculum.subjects || []).some(s => s.subject_id === id)), conf: Object.assign({}, state.userData.confidence || {}) };
+}
+function planBlocksFor(d) {
+  // alternate study and revision cycles: S1 R1 S2 R2 ...; months split to fill the time to the target date
+  const out = []; let s = 0, r = 0;
+  while (s < d.nS || r < d.nR) {
+    if (s < d.nS) { s++; out.push({ type: 'S', n: s }); }
+    if (r < d.nR && (r < s || s >= d.nS)) { r++; out.push({ type: 'R', n: r }); }
+  }
+  const total = plDaysBetween(d.start, d.target) / 30.44;
+  const wS = 3, wR = 2, tw = out.reduce((n, b) => n + (b.type === 'S' ? wS : wR), 0) || 1;
+  out.forEach(b => { b.months = Math.max(0.5, Math.round(2 * total * (b.type === 'S' ? wS : wR) / tw) / 2); });
+  planSuggestTargets(d, out);
+  return out;
+}
+function planSuggestTargets(d, blocks) {
+  const bank = plBankCounts();
+  blocks.forEach(b => {
+    const days = plMonthsToDays(b.months);
+    if (b.type === 'S') { b.pyq = Math.ceil(bank.pyq / days); b.add = Math.ceil(bank.add / days); b.rev = b.rev != null ? b.rev : 20; }
+    else { b.pyq = 0; b.add = 0; b.rev = 150; }
+  });
+}
+function planOpen() {
+  const p = state.userData.plan;
+  PW.step = 0;
+  PW.d = p ? { start: p.start, target: p.target, nS: p.blocks.filter(b => b.type === 'S').length, nR: p.blocks.filter(b => b.type === 'R').length,
+    blocks: p.blocks.map(b => Object.assign({}, b)), subjectOrder: (p.subjectOrder || []).slice(), conf: Object.assign({}, state.userData.confidence || {}) } : planDefaults();
+  document.getElementById('plan-modal').classList.remove('hidden');
+  planRender();
+}
+function planClose(skip) {
+  document.getElementById('plan-modal').classList.add('hidden');
+  if (skip && !state.userData.plan) { state.userData.planSkipped = new Date().toISOString(); saveUserData(); }
+}
+function planNext() {
+  const d = PW.d;
+  if (PW.step === 0) {
+    if (plDaysBetween(plDayKey(Date.now()), d.target) < 14) { alert('Please pick a target date at least two weeks away.'); return; }
+  }
+  if (PW.step === 1) {
+    if (d.nS < 1) { alert('Pick at least one study cycle.'); return; }
+    const cs = (d.blocks || []).filter(b => b.type === 'S').length, cr = (d.blocks || []).filter(b => b.type === 'R').length;
+    if (!d.blocks || cs !== d.nS || cr !== d.nR) d.blocks = planBlocksFor(d);
+  }
+  if (PW.step === 0 && !d.blocks) d.blocks = null;
+  PW.step++; planRender();
+}
+function planBack() { PW.step = Math.max(0, PW.step - 1); planRender(); }
+function planMove(i, dir) { const b = PW.d.blocks, j = i + dir; if (j < 0 || j >= b.length) return; [b[i], b[j]] = [b[j], b[i]]; planRender(); }
+function planMonths(i, v) { PW.d.blocks[i].months = Math.max(0.5, Math.min(36, Number(v) || 0.5)); planRender(); }
+function planFit() {
+  const d = PW.d, total = plDaysBetween(d.start, d.target) / 30.44, cur = d.blocks.reduce((n, b) => n + b.months, 0) || 1;
+  d.blocks.forEach(b => { b.months = Math.max(0.5, Math.round(2 * b.months * total / cur) / 2); });
+  planRender();
+}
+function planSet(i, k, v) { PW.d.blocks[i][k] = Math.max(0, Math.min(2000, Math.round(Number(v) || 0))); planRender(); }
+function planSuggest() { planSuggestTargets(PW.d, PW.d.blocks); planRender(); }
+function planSubjMove(i, dir) { const o = PW.d.subjectOrder, j = i + dir; if (j < 0 || j >= o.length) return; [o[i], o[j]] = [o[j], o[i]]; planRender(); }
+function planConf(sid, code) { PW.d.conf[sid] = code; planRender(); }
+function planSave() {
+  const d = PW.d;
+  // block day lengths: months -> days; the last block absorbs rounding so the plan ends on the target date
+  const blocks = d.blocks.map(b => ({ type: b.type, n: b.n, months: b.months, days: plMonthsToDays(b.months), pyq: b.pyq || 0, add: b.add || 0, rev: b.rev || 0 }));
+  const avail = plDaysBetween(d.start, d.target);
+  const sum = blocks.reduce((n, b) => n + b.days, 0);
+  if (Math.abs(sum - avail) <= 20 && blocks.length) blocks[blocks.length - 1].days = Math.max(1, blocks[blocks.length - 1].days + avail - sum);
+  const old = state.userData.plan;
+  state.userData.plan = { v: 1, created: old ? old.created : new Date().toISOString(), updated: new Date().toISOString(), start: d.start, target: d.target, blocks, subjectOrder: d.subjectOrder };
+  state.userData.confidence = Object.assign({}, state.userData.confidence || {}, d.conf);
+  state.userData.confidenceDate = new Date().toISOString();
+  delete state.userData.planSkipped;
+  saveUserData();
+  planClose(false);
+  if (state.currentView === 'strengths') renderStrengthsView();
+  dtRefreshLight();
+}
+function planInput(cls) { return 'class="mt-1 w-full border border-slate-300 rounded-lg px-2 py-1.5 text-sm ' + (cls || '') + '"'; }
+function planRender() {
+  const d = PW.d, body = document.getElementById('plan-body');
+  const steps = ['Target date', 'Cycles', 'Arrange cycles', 'Daily targets', 'Subject order', 'Confidence'];
+  let h = '<div class="flex items-center justify-between"><div><div class="text-[11px] font-bold text-indigo-600 uppercase tracking-wider">Step ' + (PW.step + 1) + ' of ' + steps.length + '</div>' +
+    '<h4 class="font-bold text-slate-900">' + steps[PW.step] + '</h4></div><button onclick="planClose(true)" class="text-slate-400 hover:text-slate-600 p-1" aria-label="Close">✕</button></div>';
+  const avail = plDaysBetween(d.start, d.target), availM = (avail / 30.44).toFixed(1);
+  if (PW.step === 0) {
+    h += '<p class="text-xs text-slate-600 leading-relaxed">When do you want to finish your preparation? Usually this is a week or two before the exam.</p>' +
+      '<label class="block text-xs font-semibold text-slate-700">Target date<input type="date" value="' + d.target + '" min="' + plAddDays(d.start, 14) + '" onchange="PW.d.target=this.value; PW.d.blocks=null; planRender()" ' + planInput() + '></label>' +
+      '<p class="text-xs text-slate-500">That is ' + avail + ' days (about ' + availM + ' months) from today.</p>';
+  } else if (PW.step === 1) {
+    h += '<p class="text-xs text-slate-600 leading-relaxed"><b>Study cycles</b> go through the question bank subject by subject. <b>Revision cycles</b> are pure revision, weighted to your weak areas.</p><div class="grid grid-cols-2 gap-3">' +
+      '<label class="text-xs font-semibold text-slate-700">Study cycles<select onchange="PW.d.nS=Number(this.value)" ' + planInput() + '>' + [1, 2, 3, 4].map(n => '<option' + (n === d.nS ? ' selected' : '') + '>' + n + '</option>').join('') + '</select></label>' +
+      '<label class="text-xs font-semibold text-slate-700">Revision cycles<select onchange="PW.d.nR=Number(this.value)" ' + planInput() + '>' + [0, 1, 2, 3, 4].map(n => '<option' + (n === d.nR ? ' selected' : '') + '>' + n + '</option>').join('') + '</select></label></div>';
+  } else if (PW.step === 2) {
+    const used = d.blocks.reduce((n, b) => n + b.months, 0);
+    h += '<p class="text-xs text-slate-600 leading-relaxed">Put the cycles in the order you want and set months for each. You have about <b>' + availM + ' months</b>.</p><div class="space-y-2">';
+    let off = 0;
+    d.blocks.forEach((b, i) => {
+      const from = plAddDays(d.start, off); off += plMonthsToDays(b.months);
+      h += '<div class="flex items-center gap-2 border rounded-xl p-2.5 ' + (b.type === 'S' ? 'bg-indigo-50 border-indigo-200' : 'bg-emerald-50 border-emerald-200') + '">' +
+        '<div class="flex flex-col"><button onclick="planMove(' + i + ',-1)" class="text-slate-500 hover:text-slate-900 text-xs px-1" aria-label="Move up">▲</button><button onclick="planMove(' + i + ',1)" class="text-slate-500 hover:text-slate-900 text-xs px-1" aria-label="Move down">▼</button></div>' +
+        '<div class="flex-1 min-w-0"><div class="text-xs font-bold text-slate-900">' + plBlockName(b) + '</div><div class="text-[10px] text-slate-500">' + plFmt(from) + ' – ' + plFmt(plAddDays(d.start, off - 1)) + '</div></div>' +
+        '<label class="text-[10px] font-semibold text-slate-600 w-20">Months<input type="number" min="0.5" max="36" step="0.5" value="' + b.months + '" onchange="planMonths(' + i + ', this.value)" ' + planInput('text-center') + '></label></div>';
+    });
+    const diff = used - avail / 30.44;
+    h += '</div><div class="flex items-center justify-between text-xs"><span class="' + (Math.abs(diff) > 0.6 ? 'text-rose-600 font-semibold' : 'text-slate-500') + '">Total ' + used + ' of ' + availM + ' months' + (Math.abs(diff) > 0.6 ? (diff > 0 ? ' (goes past your target)' : ' (finishes early)') : '') + '</span>' +
+      '<button onclick="planFit()" class="text-indigo-600 underline font-semibold">Fit to target date</button></div>';
+  } else if (PW.step === 3) {
+    const bank = plBankCounts();
+    h += '<p class="text-xs text-slate-600 leading-relaxed">Questions per day for each cycle. Suggested numbers cover the whole bank (' + bank.pyq + ' PYQs, ' + bank.add + ' additional) once per study cycle.</p><div class="space-y-2">';
+    d.blocks.forEach((b, i) => {
+      const days = plMonthsToDays(b.months);
+      const cov = b.type === 'S' ? ' · covers ' + Math.min(100, Math.round(100 * (b.pyq * days) / (bank.pyq || 1))) + '% of PYQs' : '';
+      h += '<div class="border border-slate-200 rounded-xl p-2.5 space-y-1.5"><div class="text-xs font-bold text-slate-900">' + plBlockName(b) + ' <span class="font-normal text-slate-500">(' + b.months + ' months' + cov + ')</span></div><div class="grid grid-cols-3 gap-2">';
+      const fields = b.type === 'S' ? [['pyq', 'PYQ / day'], ['add', 'Additional / day'], ['rev', 'Revision / day']] : [['pyq', 'PYQ / day'], ['add', 'Additional / day'], ['rev', 'Revision / day']];
+      fields.forEach(f => { h += '<label class="text-[10px] font-semibold text-slate-600">' + f[1] + '<input type="number" min="0" max="2000" value="' + (b[f[0]] || 0) + '" onchange="planSet(' + i + ',\'' + f[0] + '\', this.value)" ' + planInput('text-center') + '></label>'; });
+      h += '</div><div class="text-[10px] text-slate-500">' + plTargetFor(b) + ' questions a day</div></div>';
+    });
+    h += '</div><p class="text-[11px] text-slate-500 leading-relaxed">In revision cycles every question is a revision question; the PYQ and Additional numbers set how many of each type. All revision questions follow your revision mix (Settings).</p><button onclick="planSuggest()" class="text-xs text-indigo-600 underline font-semibold">Use suggested numbers</button>';
+  } else if (PW.step === 4) {
+    h += '<p class="text-xs text-slate-600 leading-relaxed">Study cycles go through subjects in this order. Days are shared out by each subject\'s number of questions.</p><div class="space-y-1">';
+    d.subjectOrder.forEach((id, i) => {
+      h += '<div class="flex items-center gap-2 border border-slate-200 rounded-lg px-2 py-1.5"><span class="text-[11px] text-slate-400 w-5">' + (i + 1) + '</span><span class="flex-1 text-xs font-semibold text-slate-800">' + pgEsc(plSubjectName(id)) + '</span>' +
+        '<button onclick="planSubjMove(' + i + ',-1)" class="text-slate-500 hover:text-slate-900 text-xs px-1.5" aria-label="Move up">▲</button><button onclick="planSubjMove(' + i + ',1)" class="text-slate-500 hover:text-slate-900 text-xs px-1.5" aria-label="Move down">▼</button></div>';
+    });
+    h += '</div>';
+  } else {
+    h += '<p class="text-xs text-slate-600 leading-relaxed">How confident are you in each subject right now? This is only a starting point for My Strengths; your answers take over as you practise.</p><div class="space-y-2.5">';
+    (state.curriculum.subjects || []).forEach(s => {
+      h += '<div class="space-y-1"><div class="text-xs font-semibold text-slate-800">' + pgEsc(s.name) + '</div><div class="flex flex-wrap gap-1">';
+      ST_CFG.survey.forEach(b => {
+        const on = d.conf[s.subject_id] === b[0];
+        h += '<button type="button" onclick="planConf(\'' + s.subject_id + '\',\'' + b[0] + '\')" class="px-2 py-1 rounded-lg border text-[11px] font-semibold ' + (on ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100') + '">' + b[1] + '</button>';
+      });
+      h += '</div></div>';
+    });
+    h += '</div>';
+  }
+  h += '<div class="flex justify-between gap-2 pt-2 border-t border-slate-100">' +
+    (PW.step ? '<button onclick="planBack()" class="px-3 py-2 border border-slate-300 rounded-lg text-xs font-semibold text-slate-700 hover:bg-slate-100">Back</button>' : '<button onclick="planClose(true)" class="px-3 py-2 text-xs font-semibold text-slate-500 hover:text-slate-800">Later</button>') +
+    (PW.step < steps.length - 1 ? '<button onclick="planNext()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold">Next</button>' : '<button onclick="planSave()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold">Save plan</button>') + '</div>';
+  body.innerHTML = h;
+}
+window.addEventListener('DOMContentLoaded', () => setTimeout(dtRefreshLight, 800));
 
 // -------------------------------------------------------------
 // UTILITIES & HELPERS
