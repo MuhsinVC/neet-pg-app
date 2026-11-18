@@ -3,11 +3,18 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#4f46e5">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="MedPrepAide">
+  <link rel="icon" type="image/png" href="icon-192.png">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
   <title>MedPrepAide — NEET PG & INI-CET All 19 Subjects Preparation Aide</title>
-  <link rel="stylesheet" href="tailwind.css?v=20261118g">
+  <link rel="stylesheet" href="tailwind.css?v=20261118h">
   <!-- Lucide Icons -->
   <script src="vendor/lucide.min.js"></script>
-  <link rel="stylesheet" href="style.css?v=20261118g">
+  <link rel="stylesheet" href="style.css?v=20261118h">
 </head>
 <body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col font-sans antialiased selection:bg-indigo-100 selection:text-indigo-800">
 
@@ -84,7 +91,7 @@
       </button>
       <button onclick="switchView('notebook')" id="tab-notebook" class="nav-tab py-2.5 sm:py-3 border-b-2 flex items-center space-x-1.5 sm:space-x-2 text-slate-500 hover:text-slate-900">
         <i data-lucide="book-marked" class="w-4 h-4 text-violet-500"></i>
-        <span>20th Notebook (Mistakes)</span>
+        <span>20th Notebook</span>
       </button>
       <button onclick="switchView('strengths')" id="tab-strengths" class="nav-tab py-2.5 sm:py-3 border-b-2 flex items-center space-x-1.5 sm:space-x-2 text-slate-500 hover:text-slate-900">
         <i data-lucide="gauge" class="w-4 h-4 text-emerald-600"></i>
@@ -534,7 +541,7 @@
               <span id="quiz-source-badge" class="bg-amber-100 text-amber-800 text-[11px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider">NEET PG 2024</span>
               <span id="quiz-subject-badge" class="bg-indigo-50 text-indigo-700 text-[11px] font-bold px-2.5 py-0.5 rounded-full">Pharmacology</span>
             </div>
-            <span class="flex items-center space-x-2"><span id="quiz-topic-tag" class="text-xs text-slate-400 font-medium">Topic Tag</span><button id="btn-report-q" onclick="reportCurrentQuestion()" class="text-[11px] text-slate-400 hover:text-rose-600 underline">Report</button></span>
+            <span class="flex items-center space-x-2"><span id="quiz-topic-tag" class="text-xs text-slate-400 font-medium">Topic Tag</span><button id="btn-bookmark-q" type="button" data-bm="" onclick="bmToggleCurrent()" class="bm-btn" title="Bookmark this question"><i data-lucide="bookmark" class="w-3.5 h-3.5"></i><span class="bm-t">Bookmark</span></button><button id="btn-report-q" onclick="reportCurrentQuestion()" class="text-[11px] text-slate-400 hover:text-rose-600 underline">Report</button></span>
           </div>
 
           <h4 id="quiz-question-text" class="text-sm sm:text-base font-medium text-slate-900 leading-relaxed">
@@ -774,6 +781,7 @@
         <h2 class="text-lg sm:text-xl font-extrabold text-slate-900">My Strengths</h2>
         <p class="text-xs sm:text-sm text-slate-500 mt-1">How well you are doing in each subject, unit and topic, worked out from your answers on this device. Tap a subject to see its units and topics.</p>
       </div>
+      <div id="mp-container"></div>
       <div id="strengths-container" class="space-y-4"></div>
     </section>
 
@@ -784,13 +792,15 @@
             <i data-lucide="bookmark" class="w-5 h-5"></i>
           </div>
           <div>
-            <h3 class="text-base sm:text-lg font-bold text-slate-900">Global 20th Notebook (Mistakes)</h3>
-            <p class="text-xs text-slate-500">Consolidated vault of questions you got wrong across all 19 subjects</p>
+            <h3 class="text-base sm:text-lg font-bold text-slate-900">20th Notebook</h3>
+            <p class="text-xs text-slate-500">Questions you got wrong, and questions you bookmarked, across all 19 subjects</p>
           </div>
         </div>
 
         <input type="text" id="notebook-search" oninput="filterNotebook()" placeholder="Search mistakes or drugs..." class="px-3.5 py-2 border border-slate-200 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 w-full sm:w-64">
       </div>
+
+      <div id="nb-tabs" class="flex gap-2"></div>
 
       <!-- Subject Filter Pills for Notebook -->
       <div class="flex items-center space-x-1.5 overflow-x-auto pb-1" id="notebook-subject-pills">
@@ -898,6 +908,8 @@
         </div>
       </div>
 
+      <div id="settings-offline"></div>
+
       <div id="settings-srs"></div>
 
       <div id="settings-extra" class="space-y-5"></div>
@@ -918,7 +930,7 @@
       </div>
       <div>
         <div class="text-base font-extrabold text-slate-900">MedPrepAide</div>
-        <p class="text-xs text-slate-600 leading-relaxed mt-1">A free question bank and self-directed study tool for NEET PG and INI-CET: questions with explanations, quick theory, tests, strength ratings and a study plan. Your progress stays on your own device. No account and no server.</p>
+        <p class="text-xs text-slate-600 leading-relaxed mt-1">A free question bank and self-directed study tool for NEET PG and INI-CET: questions with explanations, quick theory, tests, strength ratings and a study plan. Install it as an app and it works offline. Your progress stays on your own device. No account and no server.</p>
       </div>
       <div class="space-y-2.5">
         <div class="text-[11px] font-bold tracking-wider text-indigo-600 uppercase">Developers</div>
@@ -1047,6 +1059,15 @@
         <i data-lucide="chevron-right" class="w-4 h-4 text-slate-400 group-hover:text-slate-700 transition"></i>
       </button>
 
+      <!-- Install app (shown when the browser offers it) -->
+      <button id="fab-install" onclick="pwaInstall(); toggleFabMenu();" class="hidden w-full py-2.5 px-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl text-xs flex items-center justify-between transition">
+        <div class="flex items-center space-x-2.5">
+          <div class="w-7 h-7 rounded-lg bg-white/20 flex items-center justify-center shrink-0"><i data-lucide="download" class="w-4 h-4"></i></div>
+          <div class="text-left"><div class="font-bold text-xs">Install app</div><div class="text-[10px] text-indigo-100">Home-screen app that works offline</div></div>
+        </div>
+        <i data-lucide="chevron-right" class="w-4 h-4"></i>
+      </button>
+
       <!-- About us -->
       <button onclick="toggleAboutModal(); toggleFabMenu();" class="w-full py-2.5 px-3 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-800 font-semibold rounded-xl text-xs flex items-center justify-between transition group">
         <div class="flex items-center space-x-2.5">
@@ -1072,8 +1093,8 @@
   </div>
 
   <!-- DATA & APP LOGIC SCRIPTS -->
-  <script src="data/index.js?v=20261118g"></script>
-  <script src="app.js?v=20261118g"></script>
+  <script src="data/index.js?v=20261118h"></script>
+  <script src="app.js?v=20261118h"></script>
 <div id="loading-overlay" class="hidden fixed inset-0 z-[100] bg-slate-900/60 flex items-center justify-center"><div class="bg-white rounded-2xl px-6 py-5 text-sm font-semibold text-slate-700 shadow-xl">Loading questions…</div></div>
 </body>
 </html>

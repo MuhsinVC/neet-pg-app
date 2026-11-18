@@ -60,7 +60,7 @@ const SUBJECT_CATEGORIES = {
 // -------------------------------------------------------------
 // LAZY PER-SUBJECT QUESTION LOADING (home page loads only the index)
 // -------------------------------------------------------------
-const DATA_VERSION = '20261118g';
+const DATA_VERSION = '20261118h';
 const REPO_ISSUES_URL = 'https://github.com/MuhsinVC/neet-pg-app/issues/new';
 const _subjectLoads = {};
 
@@ -98,7 +98,7 @@ async function ensureSubjects(ids) {
     await Promise.all(pending.map(loadSubjectData));
     return true;
   } catch (e) {
-    alert('Could not download the question data. Please check your internet connection and try again.');
+    alert(navigator.onLine === false ? 'You are offline and some of these questions are not saved on this device yet. Subjects are saved for offline use when you open them while online.' : 'Could not download the question data. Please check your internet connection and try again.');
     return false;
   } finally {
     if (overlay) overlay.classList.add('hidden');
@@ -348,7 +348,7 @@ function switchView(viewName) {
   if (viewName === 'theory') renderTheoryVault();
   if (viewName === 'srs') ensureSubjects(dueSrsSubjectIds()).then(renderSrsView);
   if (viewName === 'notebook') renderNotebookView();
-  if (viewName === 'strengths') renderStrengthsView();
+  if (viewName === 'strengths') { renderStrengthsView(); mpRender(); }
   if (viewName === 'daily') dtRenderLanding();
 
   window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -688,6 +688,7 @@ async function startGrandTest(examType) {
 function startGrandTestNow(examType) {
   state.quizMode = 'GRAND_TEST';
   state.gtExamType = examType;
+  state.gtTimes = {}; state._qShownId = null;
   state.dtCtx = null;
   state.userAnswers = {};
   state.markedForReview = {};
@@ -904,6 +905,7 @@ function submitGrandTestConfirm() {
 
 function submitGrandTest() {
   stopTimer();
+  gtAddTime();
   const cfg = state.gtConfig;
   const total = state.activeQuestions.length;
   let correct = 0;
@@ -1125,6 +1127,8 @@ function renderCurrentQuestion() {
   const q = state.activeQuestions[state.currentQIndex];
   if (!q) return;
   if (state.dtCtx && state.quizMode === 'RAPID_FIRE') dtSubtitle(q);
+  if (state.quizMode === 'GRAND_TEST' && state.gtTimes && state._qShownId && state._qShownMode === 'GRAND_TEST' && state._qShownId !== q.id) gtAddTime();
+  bmPaintCurrent(q);
   if (state._qShownId !== q.id || state._qShownMode !== state.quizMode) { state._qShownId = q.id; state._qShownMode = state.quizMode; state._qShownAt = Date.now(); }
 
   const total = state.activeQuestions.length;
@@ -1437,8 +1441,9 @@ function submitQuiz() {
 
   state.activeQuestions.forEach(q => {
     const chosen = state.userAnswers[q.id];
-    const sId = state.activeSubject ? state.activeSubject.subject_id : 'GENERAL';
-    if (chosen) pgLog(q, chosen, chosen === q.correct_option, state.quizMode);
+    const sId = q.subject_id || (state.activeSubject ? state.activeSubject.subject_id : 'GENERAL');
+    if (!chosen) return; // unanswered: untouched, stays due
+    pgLog(q, chosen, chosen === q.correct_option, state.quizMode);
     if (chosen === q.correct_option) {
       correctCount++;
       scheduleSrsReview(q.id, sId, true);
@@ -1453,10 +1458,10 @@ function submitQuiz() {
 
   // Save history
   state.userData.history.push({
-    mode: 'UNIT',
-    subjectId: state.activeSubject ? state.activeSubject.subject_id : '',
-    unitId: state.activeUnit ? state.activeUnit.unit_id : '',
-    title: state.activeUnit ? state.activeUnit.title : 'Unit Test',
+    mode: state.quizMode === 'SRS' ? 'SRS' : 'UNIT',
+    subjectId: state.quizMode === 'SRS' ? '' : (state.activeSubject ? state.activeSubject.subject_id : ''),
+    unitId: state.quizMode === 'SRS' ? '' : (state.activeUnit ? state.activeUnit.unit_id : ''),
+    title: state.quizMode === 'SRS' ? (total === 1 ? 'Spaced Review (single question)' : 'Spaced Review drill') : (state.activeUnit ? state.activeUnit.title : 'Unit Test'),
     date: new Date().toISOString(),
     totalQuestions: total,
     correctCount: correctCount,
@@ -1466,12 +1471,14 @@ function submitQuiz() {
   saveUserData();
 
   // Populate Post-Test Banner
-  document.getElementById('post-title').textContent = "Diagnostic Test Complete!";
-  document.getElementById('post-badge').textContent = pct >= 70 ? "Mastery Achieved!" : "Needs Revision";
+  const srsDrill = state.quizMode === 'SRS';
+  document.getElementById('post-title').textContent = srsDrill ? (total === 1 ? 'Review done' : 'Spaced Review drill complete') : "Diagnostic Test Complete!";
+  document.getElementById('post-badge').textContent = srsDrill ? (correctCount + wrongCount) + ' of ' + total + ' answered' : (pct >= 70 ? "Mastery Achieved!" : "Needs Revision");
   document.getElementById('score-percent').textContent = `${pct}%`;
   document.getElementById('score-percent-label').textContent = "Score";
   document.getElementById('post-summary-text').textContent = 
-    `You got ${correctCount} correct out of ${total} questions in ${formatTime(state.elapsedSeconds)}. All mistakes stay in your Daily Spaced Review queue until completed.`;
+    srsDrill ? `You got ${correctCount} right and ${wrongCount} wrong in ${formatTime(state.elapsedSeconds)}. Right answers move to their next review step; wrong ones start again at the first step.` + ((total - correctCount - wrongCount) ? ` ${total - correctCount - wrongCount} unanswered ${total - correctCount - wrongCount === 1 ? 'stays' : 'stay'} due.` : '')
+    : `You got ${correctCount} correct out of ${total} questions in ${formatTime(state.elapsedSeconds)}. All mistakes stay in your Daily Spaced Review queue until completed.`;
 
   document.getElementById('review-correct-count').textContent = `${correctCount} Correct`;
   document.getElementById('review-wrong-count').textContent = `${wrongCount} Wrong`;
@@ -1535,6 +1542,8 @@ function renderUnitQuickTheory(unit) {
 function renderReviewList(questions) {
   const container = document.getElementById('post-test-questions-list');
   container.innerHTML = '';
+  const gtTimed = state.quizMode === 'GRAND_TEST' && state.gtTimes && Object.keys(state.gtTimes).length > 0;
+  if (gtTimed) gtTimeSummary(container, questions);
 
   questions.forEach((q, idx) => {
     const userChoice = state.userAnswers[q.id];
@@ -1585,7 +1594,7 @@ function renderReviewList(questions) {
             ${isCorrect ? 'Correct (+4)' : 'Incorrect (-1)'}
           </span>
         </div>
-        <span class="text-[11px] font-semibold text-slate-400">${q.exam_source}</span>
+        <span class="flex items-center gap-2 flex-wrap justify-end">${gtTimed ? gtTimeChip(q.id) : ''}${bmBtnHtml(q.id, q.subject_id)}<span class="text-[11px] font-semibold text-slate-400">${q.exam_source}</span></span>
       </div>
 
       <p class="text-sm font-semibold text-slate-900 leading-snug">${q.question}</p>
@@ -1663,7 +1672,7 @@ function srsWants(src) { return !!srsPrefs().src[src]; }
 function srsSourceNow() {
   if (state.quizMode === 'RAPID_FIRE') {
     if (state.dtCtx && state.dtCtx.kind) return 'daily';
-    if (state.rfTitle === '⚡ Revision Drill') return 'revdrill';
+    if (state.rfScope === 'LIST' && state.rfTitle === '⚡ Revision Drill') return 'revdrill';
     return 'rf';
   }
   if (state.quizMode === 'GRAND_TEST') {
@@ -1810,7 +1819,7 @@ function renderSrsView() {
     
     const overdueBadge = item.daysOverdue === 0
       ? `<span class="bg-rose-50 text-rose-700 text-[10px] font-bold px-2 py-0.5 rounded-md">Due Today</span>`
-      : `<span class="bg-rose-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-md animate-pulse">Overdue by ${item.daysOverdue} Days</span>`;
+      : `<span class="bg-rose-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-md animate-pulse">Overdue by ${item.daysOverdue} ${item.daysOverdue === 1 ? 'Day' : 'Days'}</span>`;
 
     card.innerHTML = `
       <div class="space-y-1 min-w-0">
@@ -1848,6 +1857,7 @@ function startSrsDrillNow() {
   if (due.length === 0) return;
 
   state.quizMode = 'SRS';
+  state.activeUnit = null;
   state.activeQuestions = due.map(d => d.question);
   state.currentQIndex = 0;
   state.userAnswers = {};
@@ -1874,6 +1884,7 @@ function startSingleQuestionDrill(qId) {
   if (!q) return;
 
   state.quizMode = 'SRS';
+  state.activeUnit = null;
   state.activeQuestions = [q];
   state.currentQIndex = 0;
   state.userAnswers = {};
@@ -1906,6 +1917,11 @@ function recordMistake(q, subjectId, userChoice) {
 }
 
 function renderNotebookView() {
+  nbRenderTabs();
+  if ((state.nbTab || 'M') === 'B') { bmRenderList(); return; }
+  nbRenderMistakes();
+}
+function nbRenderMistakes() {
   const container = document.getElementById('notebook-container');
   const pillsContainer = document.getElementById('notebook-subject-pills');
   if (!container || !pillsContainer) return;
@@ -2442,7 +2458,7 @@ PG_WRONG.concat(PG_RIGHT).forEach(p => { PG_LABEL[p[0]] = p[1]; });
 function pgS() { return state._pg || (state._pg = { att: {}, done: {} }); }
 function pgEsc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;'); }
 function pgSettings() { try { return JSON.parse(localStorage.getItem('MEDAIDE_SETTINGS_V1') || '{}') || {}; } catch (e) { return {}; } }
-function pgOn() { return !!pgSettings().pedagogy; }
+function pgOn() { const s = pgSettings(); return s.pedagogy === undefined ? true : !!s.pedagogy; }
 function pgSetOn(v) {
   const s = pgSettings(); s.pedagogy = !!v;
   try { localStorage.setItem('MEDAIDE_SETTINGS_V1', JSON.stringify(s)); } catch (e) {}
@@ -2501,7 +2517,7 @@ function pgLog(q, chosen, ok, mode) {
     const timed = mode === 'PRACTICE' || mode === 'RAPID_FIRE';
     const sid = q.subject_id || (state.activeSubject ? state.activeSubject.subject_id : 'GENERAL');
     const rec = { qid: q.id, ts: Date.now(), mode: mode, chosen: chosen, correct: !!ok,
-      ms: timed && state._qShownAt ? Date.now() - state._qShownAt : null,
+      ms: timed && state._qShownAt ? Date.now() - state._qShownAt : (mode === 'GRAND_TEST' && state.gtTimes && state.gtTimes[q.id] ? Math.round(state.gtTimes[q.id]) : null),
       subject: sid, qtype: q.question_type || null, why: null, v: 1 };
     if (state.dtCtx && mode === 'RAPID_FIRE') { rec.daily = state.dtCtx.day; rec.part = state.dtCtx.part[q.id] || null; if (state.dtCtx.cu) rec.cu = 1; }
     pgS().att[q.id] = alogAdd(rec);
@@ -2578,6 +2594,7 @@ function toggleSettingsModal() {
     const cb = document.getElementById('pg-toggle'); if (cb) cb.checked = pgOn();
     rvRenderSettings();
     srsRenderSettings();
+    pwaRenderSettings();
     alogAll().then(a => { const el = document.getElementById('pg-log-count'); if (el) el.textContent = a.length; });
   }
 }
@@ -2647,7 +2664,7 @@ function stEnsureTopics() {
   if (ST.loading) return ST.loading;
   ST.loading = new Promise(res => {
     const s = document.createElement('script');
-    s.src = 'data/topics.js?v=20261118g';
+    s.src = 'data/topics.js?v=20261118h';
     s.onload = () => res(window.TOPIC_DATA || null);
     s.onerror = () => { ST.loading = null; res(null); };
     document.head.appendChild(s);
@@ -3622,4 +3639,227 @@ async function dtRenderLanding() {
   if (P) h += '<p class="text-[11px] text-slate-500 leading-relaxed">Green = ahead, orange = on time, red = behind. Only questions answered from the Daily Target (or Catch up / Do more) count towards the plan.</p>';
   box.innerHTML = h;
   setTimeout(() => { try { lucide.createIcons(); } catch (e) {} }, 20);
+}
+
+
+// ================= 20261118h =================
+// ---- Grand Test time per question ----
+function gtAddTime() {
+  if (state.quizMode !== 'GRAND_TEST' || !state.gtTimes || !state._qShownId || !state._qShownAt) return;
+  const now = Date.now();
+  state.gtTimes[state._qShownId] = (state.gtTimes[state._qShownId] || 0) + (now - state._qShownAt);
+  state._qShownAt = now;
+}
+function gtFmt(ms) { const s = Math.round((ms || 0) / 1000); return s < 60 ? s + 's' : Math.floor(s / 60) + 'm ' + String(s % 60).padStart(2, '0') + 's'; }
+function gtTimeChip(id) {
+  const ms = state.gtTimes[id] || 0, cfg = state.gtConfig || {}, pace = cfg.count ? cfg.durationMins * 60000 / cfg.count : 63000;
+  const cls = !ms ? 'bg-slate-100 text-slate-400' : ms > 2 * pace ? 'bg-rose-100 text-rose-700' : ms > pace ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-600';
+  return '<span class="text-[10px] font-bold px-1.5 py-0.5 rounded-md ' + cls + '" title="Time spent on this question">⏱ ' + (ms ? gtFmt(ms) : 'not opened') + '</span>';
+}
+function gtTimeSummary(container, questions) {
+  const T = state.gtTimes, cfg = state.gtConfig || {}, pace = cfg.count ? cfg.durationMins * 60000 / cfg.count : 63000;
+  const rows = questions.map((q, i) => ({ q, i, ms: T[q.id] || 0, ch: state.userAnswers[q.id] }));
+  const att = rows.filter(r => r.ch), right = att.filter(r => r.ch === r.q.correct_option), wrong = att.filter(r => r.ch !== r.q.correct_option);
+  const avg = a => a.length ? a.reduce((s, r) => s + r.ms, 0) / a.length : 0;
+  const total = rows.reduce((s, r) => s + r.ms, 0);
+  const slow = rows.filter(r => r.ms > 0).sort((a, b) => b.ms - a.ms).slice(0, 5);
+  const rushed = wrong.filter(r => r.ms > 0 && r.ms < 20000).length, stuck = wrong.filter(r => r.ms > 2 * pace).length;
+  const box = document.createElement('div');
+  box.className = 'bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-3';
+  const tile = (t, v, s) => '<div class="bg-slate-50 rounded-xl p-3"><div class="text-[11px] text-slate-500">' + t + '</div><div class="text-base font-extrabold text-slate-900">' + v + '</div>' + (s ? '<div class="text-[10px] text-slate-500">' + s + '</div>' : '') + '</div>';
+  box.innerHTML = '<div class="flex items-center gap-2"><i data-lucide="timer" class="w-4 h-4 text-indigo-600"></i><h4 class="text-sm font-bold text-slate-900">Time per question</h4><span class="text-[11px] text-slate-500">exam pace ' + gtFmt(pace) + ' a question</span></div>' +
+    '<div class="grid grid-cols-2 sm:grid-cols-4 gap-2">' + tile('Average (attempted)', gtFmt(avg(att)), gtFmt(total) + ' in total') + tile('On right answers', gtFmt(avg(right)), right.length + ' questions') + tile('On wrong answers', gtFmt(avg(wrong)), wrong.length + ' questions') +
+    tile('Wrong under 20 s', rushed, stuck ? stuck + ' wrong after over ' + gtFmt(2 * pace) : 'possibly rushed') + '</div>' +
+    (slow.length ? '<div class="text-xs text-slate-600"><b class="text-slate-800">Slowest:</b> ' + slow.map(r => '<button type="button" onclick="gtJump(' + r.i + ')" class="underline decoration-dotted hover:text-indigo-700">Q' + (r.i + 1) + ' (' + gtFmt(r.ms) + (r.ch ? (r.ch === r.q.correct_option ? ', right' : ', wrong') : ', skipped') + ')</button>').join(' · ') + '</div>' : '') +
+    '<p class="text-[11px] text-slate-500">Each question shows its time. Amber = slower than exam pace, red = more than twice the pace. Time counts only while the question was on screen.</p>';
+  container.appendChild(box);
+}
+function gtJump(i) { const el = document.querySelectorAll('#post-test-questions-list > div')[i + 1]; if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+
+// ---- Bookmarks ----
+function bmAll() { if (!state.userData.bookmarks || typeof state.userData.bookmarks !== 'object') state.userData.bookmarks = {}; return state.userData.bookmarks; }
+function bmHas(id) { return !!(state.userData.bookmarks || {})[id]; }
+function bmPaint(el) {
+  const on = bmHas(el.getAttribute('data-bm'));
+  el.classList.toggle('bm-on', on);
+  const t = el.querySelector('.bm-t'); if (t) t.textContent = on ? 'Bookmarked' : 'Bookmark';
+  el.title = on ? 'Remove bookmark' : 'Bookmark this question';
+}
+function bmToggle(id, sid) {
+  const B = bmAll();
+  if (B[id]) delete B[id]; else B[id] = { subjectId: sid || null, ts: new Date().toISOString() };
+  saveUserData();
+  document.querySelectorAll('[data-bm="' + id + '"]').forEach(bmPaint);
+  dtToast(B[id] ? '🔖 Bookmarked (20th Notebook → Bookmarks)' : 'Bookmark removed');
+  if (state.currentView === 'notebook') renderNotebookView();
+}
+function bmToggleCurrent() { const q = state.activeQuestions[state.currentQIndex]; if (q) bmToggle(q.id, q.subject_id); }
+function bmPaintCurrent(q) { const b = document.getElementById('btn-bookmark-q'); if (b && q) { b.setAttribute('data-bm', q.id); bmPaint(b); } }
+function bmBtnHtml(id, sid) {
+  const on = bmHas(id);
+  return '<button type="button" data-bm="' + pgEsc(id) + '" onclick="bmToggle(\'' + pgEsc(id) + '\', \'' + pgEsc(sid || '') + '\')" class="bm-btn' + (on ? ' bm-on' : '') + '" title="' + (on ? 'Remove bookmark' : 'Bookmark this question') + '"><i data-lucide="bookmark" class="w-3.5 h-3.5"></i><span class="bm-t">' + (on ? 'Bookmarked' : 'Bookmark') + '</span></button>';
+}
+async function bmDrill(ids) {
+  if (!ids.length) return;
+  dtLaunchIds(ids, '🔖 Bookmarks drill', ids.length + ' bookmarked question' + (ids.length === 1 ? '' : 's') + ' • End anytime', null);
+}
+
+// 20th Notebook: Mistakes / Bookmarks sections
+function nbRenderTabs() {
+  const box = document.getElementById('nb-tabs'); if (!box) return;
+  const tab = state.nbTab || 'M';
+  const nM = Object.values(state.userData.mistakes || {}).filter(m => !m.hidden).length, nB = Object.keys(state.userData.bookmarks || {}).length;
+  const b = (k, t, n, ic) => '<button type="button" onclick="state.nbTab=\'' + k + '\'; renderNotebookView()" class="flex-1 sm:flex-none px-4 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition ' +
+    (tab === k ? 'bg-amber-600 text-white shadow-sm' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100') + '"><i data-lucide="' + ic + '" class="w-4 h-4"></i>' + t + ' <span class="opacity-80">(' + n + ')</span></button>';
+  box.innerHTML = b('M', 'Mistakes', nM, 'circle-x') + b('B', 'Bookmarks', nB, 'bookmark');
+  const s = document.getElementById('notebook-search'); if (s) s.placeholder = tab === 'B' ? 'Search bookmarks…' : 'Search mistakes or drugs...';
+}
+async function bmRenderList() {
+  const container = document.getElementById('notebook-container'), pills = document.getElementById('notebook-subject-pills');
+  if (!container || !pills) return;
+  const B = bmAll(), ids = Object.keys(B);
+  const sids = [...new Set(ids.map(i => B[i].subjectId).filter(Boolean))].filter(id => state.curriculum.subjects.some(s => s.subject_id === id));
+  if (sids.length) await ensureSubjects(sids);
+  let items = ids.map(id => ({ id, b: B[id], q: findQuestionById(id) })).filter(x => x.q).sort((a, b) => String(b.b.ts).localeCompare(String(a.b.ts)));
+  const sel = state.bmSubj || 'ALL';
+  const subs = ['ALL', ...new Set(items.map(x => x.q.subject_id))];
+  pills.innerHTML = subs.map(s => '<button type="button" onclick="state.bmSubj=\'' + s + '\'; renderNotebookView()" class="px-3 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition ' +
+    (sel === s ? 'bg-amber-600 text-white font-bold shadow-sm' : 'border border-slate-200 text-slate-600 hover:bg-slate-100') + '">' + (s === 'ALL' ? 'All (' + items.length + ')' : pgEsc(plSubjectName(s))) + '</button>').join('');
+  if (sel !== 'ALL') items = items.filter(x => x.q.subject_id === sel);
+  const query = (document.getElementById('notebook-search')?.value || '').toLowerCase().trim();
+  if (query) items = items.filter(x => (x.q.question + ' ' + ((x.q.explanation || {}).rationale || '') + ' ' + ((x.q.explanation || {}).high_yield_pearl || '')).toLowerCase().includes(query));
+  if (!items.length) {
+    container.innerHTML = '<div class="bg-white border border-slate-200 rounded-2xl p-8 text-center space-y-3"><div class="w-12 h-12 rounded-full bg-amber-100 text-amber-600 mx-auto flex items-center justify-center"><i data-lucide="bookmark" class="w-6 h-6"></i></div>' +
+      '<h4 class="text-base font-bold text-slate-900">' + (ids.length ? 'No bookmarks match' : 'No bookmarks yet') + '</h4><p class="text-xs text-slate-500 max-w-sm mx-auto">Tap <b>Bookmark</b> next to Report on any question (or on a Grand Test review card) to keep it here for later.</p></div>';
+    lucide.createIcons(); return;
+  }
+  let h = '<div class="flex items-center justify-between gap-3 flex-wrap"><span class="text-xs text-slate-500">' + items.length + ' bookmarked question' + (items.length === 1 ? '' : 's') + '</span>' +
+    '<button type="button" onclick="bmDrill(' + pgEsc(JSON.stringify(items.map(x => x.id))).replace(/"/g, '&quot;') + ')" class="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2"><i data-lucide="play" class="w-4 h-4"></i>Drill these ' + items.length + '</button></div>';
+  items.forEach(x => {
+    const q = x.q, ex = q.explanation || {};
+    h += '<div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-3"><div class="flex items-center justify-between gap-2 flex-wrap"><div class="flex items-center gap-2 flex-wrap">' +
+      '<span class="bg-amber-100 text-amber-800 text-[11px] font-bold px-2 py-0.5 rounded-md">' + pgEsc(plSubjectName(q.subject_id)) + '</span><span class="text-xs font-semibold text-slate-500">' + pgEsc(q.exam_source || '') + '</span></div>' +
+      '<div class="flex items-center gap-1"><span class="text-[11px] text-slate-400">' + new Date(x.b.ts).toLocaleDateString() + '</span>' +
+      '<button onclick="startSingleQuestionDrill(\'' + pgEsc(q.id) + '\')" class="px-3 py-1 bg-brand-50 hover:bg-brand-100 text-brand-700 rounded-lg text-xs font-bold">Review</button>' +
+      '<button onclick="bmToggle(\'' + pgEsc(q.id) + '\')" class="btn-rm" title="Remove bookmark">Remove</button></div></div>' +
+      '<h5 class="text-sm font-semibold text-slate-900 leading-snug">' + pgEsc(q.question) + '</h5>' +
+      '<details class="text-xs text-slate-700"><summary class="cursor-pointer font-semibold text-amber-700">Show answer</summary><div class="mt-2 space-y-1.5"><p><b>Answer ' + pgEsc(q.correct_option) + ':</b> ' + pgEsc((q.options || {})[q.correct_option] || '') + '</p>' +
+      (ex.rationale ? '<p class="text-slate-600">' + pgEsc(ex.rationale) + '</p>' : '') + (ex.high_yield_pearl ? '<p class="bg-amber-50 border border-amber-200 rounded-lg p-2"><b>Pearl:</b> ' + pgEsc(ex.high_yield_pearl) + '</p>' : '') + '</div></details></div>';
+  });
+  container.innerHTML = h;
+  lucide.createIcons();
+}
+
+// ---- Mistake patterns (My Strengths) ----
+let MP_RANGE = 30;
+const MP_TIPS = {
+  DK: 'These are knowledge gaps: read the Quick Theory for those topics before trying again.',
+  MISREAD: 'Read the last line of the question first and watch for NOT, EXCEPT and MOST.',
+  BUZZ: 'Read every option before choosing; a familiar buzzword is often the trap.',
+  CHANGED: 'Your first answer was often right: change it only with a clear reason.',
+  SURE: 'Confidently wrong usually means a misconception: reread the explanation and the pearl.'
+};
+function mpSetRange(n) { MP_RANGE = n; mpRender(); }
+async function mpRender() {
+  const box = document.getElementById('mp-container'); if (!box) return;
+  const log = await alogAll(), now = Date.now(), from = MP_RANGE ? now - MP_RANGE * 864e5 : 0;
+  const L = log.filter(r => r.ts >= from), W = L.filter(r => !r.correct), R = L.filter(r => r.correct);
+  const chip = (n, t) => '<button type="button" onclick="mpSetRange(' + n + ')" class="px-2.5 py-1 rounded-lg text-[11px] font-bold ' + (MP_RANGE === n ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200') + '">' + t + '</button>';
+  let h = '<div class="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 space-y-3"><div class="flex items-center justify-between gap-2 flex-wrap"><div class="flex items-center gap-2"><i data-lucide="search-check" class="w-4 h-4 text-indigo-600"></i><h3 class="text-sm font-bold text-slate-900">Mistake patterns</h3>' +
+    '<span class="text-[11px] text-slate-500">' + W.length + ' wrong of ' + L.length + ' answers</span></div><div class="flex gap-1">' + chip(7, '7 days') + chip(30, '30 days') + chip(0, 'All') + '</div></div>';
+  if (W.length < 5) { box.innerHTML = h + '<p class="text-xs text-slate-500">Not enough mistakes in this period to see patterns yet (' + W.length + ' so far). Patterns appear after 5 wrong answers.</p></div>'; lucide.createIcons(); return; }
+  const ins = [];
+  // why-reasons
+  const whyW = W.filter(r => r.why && MP_TIPS[r.why]);
+  const wc = {}; whyW.forEach(r => wc[r.why] = (wc[r.why] || 0) + 1);
+  if (whyW.length >= 3) {
+    const top = Object.entries(wc).sort((a, b) => b[1] - a[1])[0];
+    ins.push(['message-circle-question', Math.round(100 * top[1] / whyW.length) + '% of the misses you gave a reason for were "' + PG_LABEL[top[0]] + '". ' + MP_TIPS[top[0]]]);
+  }
+  // rushed
+  const tW = W.filter(r => r.ms > 0), tR = R.filter(r => r.ms > 0);
+  if (tW.length >= 5) {
+    const fast = tW.filter(r => r.ms < 20000).length, med = a => { const s = a.map(r => r.ms).sort((x, y) => x - y); return s.length ? s[Math.floor(s.length / 2)] : 0; };
+    if (fast / tW.length >= 0.25) ins.push(['zap', Math.round(100 * fast / tW.length) + '% of your timed wrong answers came in under 20 seconds' + (tR.length ? ' (right answers take you about ' + gtFmt(med(tR)) + ')' : '') + '. Some of these may be rushed.']);
+    const slowW = tW.filter(r => r.ms > 120000).length;
+    if (slowW / tW.length >= 0.2) ins.push(['hourglass', slowW + ' wrong answers took over 2 minutes: long thinking often means the topic is shaky, not that more time will help.']);
+  }
+  // repeat misses
+  const allWrong = {}; log.forEach(r => { if (!r.correct) allWrong[r.qid] = (allWrong[r.qid] || 0) + 1; });
+  const rep = [...new Set(W.map(r => r.qid))].filter(q => allWrong[q] >= 2).length;
+  if (rep) ins.push(['repeat', rep + ' question' + (rep === 1 ? ' was' : 's were') + ' missed more than once. These are your most stubborn gaps: they are in the 20th Notebook.']);
+  // topics
+  const T = await stEnsureTopics();
+  if (T && T.q) {
+    const tw = {}, tt = {};
+    L.forEach(r => { const m = T.q[r.qid]; if (!m) return; const k = m[1]; tt[k] = (tt[k] || 0) + 1; if (!r.correct) tw[k] = (tw[k] || 0) + 1; });
+    const top = Object.entries(tw).filter(e => e[1] >= 3).sort((a, b) => b[1] - a[1]).slice(0, 3);
+    if (top.length) ins.push(['map-pin', 'Most misses: ' + top.map(e => { const t = T.topics[e[0]]; return '<b>' + pgEsc(t[3]) + '</b> <span class="text-slate-500">(' + pgEsc(plSubjectName(t[1])) + ', ' + e[1] + ' of ' + tt[e[0]] + ' wrong)</span>'; }).join('; ') + '.']);
+  }
+  // question type
+  const ty = { PYQ: 'PYQ', PRACTICE: 'Additional', EXTREME: 'Extreme' }, acc = [];
+  Object.keys(ty).forEach(k => { const a = L.filter(r => r.qtype === k); if (a.length >= 10) acc.push(ty[k] + ' ' + Math.round(100 * a.filter(r => r.correct).length / a.length) + '%'); });
+  if (acc.length >= 2) ins.push(['percent', 'Accuracy by question type: ' + acc.join(' · ') + '.']);
+  if (!ins.length) ins.push(['check', 'No strong pattern in this period. Keep answering; patterns get clearer with more answers.']);
+  h += '<ul class="space-y-2">' + ins.slice(0, 5).map(i => '<li class="flex items-start gap-2.5 text-xs sm:text-sm text-slate-700 leading-relaxed"><span class="w-7 h-7 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0"><i data-lucide="' + i[0] + '" class="w-4 h-4"></i></span><span class="pt-1">' + i[1] + '</span></li>').join('') + '</ul>';
+  // why-reason bars
+  if (whyW.length) {
+    const mx = Math.max(...Object.values(wc));
+    h += '<details class="text-xs"><summary class="cursor-pointer font-semibold text-indigo-700">Why you missed (' + whyW.length + ' with a reason)</summary><div class="mt-2 space-y-1.5">' + PG_WRONG.map(p => { const n = wc[p[0]] || 0;
+      return '<div class="flex items-center gap-2"><span class="w-52 shrink-0 text-slate-600 truncate">' + p[1] + '</span><span class="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden"><span class="block h-2 bg-indigo-500 rounded-full" style="width:' + (mx ? Math.round(100 * n / mx) : 0) + '%"></span></span><span class="w-8 text-right font-bold text-slate-700">' + n + '</span></div>'; }).join('') + '</div></details>';
+  } else if (!pgOn()) {
+    h += '<p class="text-[11px] text-slate-500">Turn on Advanced pedagogy mode in Settings to tell the app why you missed a question; the patterns get sharper.</p>';
+  }
+  box.innerHTML = h + '</div>';
+  lucide.createIcons();
+}
+
+// ---- Installable app + offline ----
+let PWA_PROMPT = null;
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); PWA_PROMPT = e; pwaUpdateUi(); });
+window.addEventListener('appinstalled', () => { PWA_PROMPT = null; try { dtToast('MedPrepAide installed'); } catch (x) {} pwaUpdateUi(); });
+window.addEventListener('offline', () => { try { dtToast('You are offline. Saved subjects still work.'); } catch (x) {} });
+window.addEventListener('online', () => { try { dtToast('Back online.'); } catch (x) {} });
+if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
+  window.addEventListener('load', () => { navigator.serviceWorker.register('./sw.js').catch(e => console.warn('service worker', e)); });
+}
+function pwaStandalone() { return (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true; }
+function pwaIOS() { return /iphone|ipad|ipod/i.test(navigator.userAgent); }
+async function pwaInstall() {
+  if (!PWA_PROMPT) { if (document.getElementById('settings-modal').classList.contains('hidden')) toggleSettingsModal(); return; }
+  PWA_PROMPT.prompt();
+  try { await PWA_PROMPT.userChoice; } catch (e) {}
+  PWA_PROMPT = null; pwaUpdateUi();
+}
+function pwaUpdateUi() {
+  const b = document.getElementById('fab-install'); if (b) b.classList.toggle('hidden', !PWA_PROMPT || pwaStandalone());
+  const m = document.getElementById('settings-modal'); if (m && !m.classList.contains('hidden')) pwaRenderSettings();
+}
+async function pwaSaved() {
+  if (!('caches' in window)) return null;
+  try {
+    const c = await caches.open('mpa-files'), keys = await c.keys();
+    const subj = [...new Set(keys.map(k => (k.url.match(/\/data\/q-([A-Z]+)\.js/) || [])[1]).filter(Boolean))];
+    return { subj, theory: keys.some(k => /\/data\/theory\.js/.test(k.url)) };
+  } catch (e) { return null; }
+}
+async function pwaRenderSettings() {
+  const box = document.getElementById('settings-offline'); if (!box) return;
+  const sw = 'serviceWorker' in navigator, ctl = sw && navigator.serviceWorker.controller, saved = await pwaSaved();
+  let status;
+  if (!sw || !saved) status = 'This browser cannot save the app for offline use.';
+  else if (!ctl) status = 'Offline support starts the next time you open the app.';
+  else {
+    const all = state.curriculum.subjects, have = all.filter(s => saved.subj.includes(s.subject_id));
+    status = '<b>Works offline:</b> the app, your progress and <b>' + have.length + ' of ' + all.length + ' subjects</b>' + (saved.theory ? ' plus Quick Theory' : '') + '.' +
+      (have.length ? '<div class="flex flex-wrap gap-1 mt-1.5">' + have.map(s => '<span class="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-1.5 py-0.5 rounded">' + pgEsc(s.name) + '</span>').join('') + '</div>' : '') +
+      '<div class="mt-1.5">Subjects are saved when you open them while online. Tests across all subjects need every subject saved.</div>';
+  }
+  let inst;
+  if (pwaStandalone()) inst = '<span class="text-emerald-700 font-bold">✓ Installed as an app</span>';
+  else if (PWA_PROMPT) inst = '<button onclick="pwaInstall()" class="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold">Install app</button>';
+  else if (pwaIOS()) inst = 'On iPhone or iPad: tap <b>Share</b>, then <b>Add to Home Screen</b>.';
+  else inst = 'To install, use the browser menu: <b>Install app</b> or <b>Add to Home screen</b>.';
+  box.innerHTML = '<div class="bg-emerald-50/60 border border-emerald-200 rounded-xl p-3.5 space-y-2.5"><div class="text-xs font-bold text-slate-800">Offline &amp; install</div>' +
+    '<div class="text-[11px] text-slate-700 leading-relaxed">' + status + '</div><div class="text-[11px] text-slate-700">' + inst + '</div></div>';
 }
