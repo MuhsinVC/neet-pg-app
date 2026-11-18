@@ -60,7 +60,7 @@ const SUBJECT_CATEGORIES = {
 // -------------------------------------------------------------
 // LAZY PER-SUBJECT QUESTION LOADING (home page loads only the index)
 // -------------------------------------------------------------
-const DATA_VERSION = '20261118i';
+const DATA_VERSION = '20261118j';
 const REPO_ISSUES_URL = 'https://github.com/MuhsinVC/neet-pg-app/issues/new';
 const _subjectLoads = {};
 
@@ -946,7 +946,7 @@ function submitGrandTest() {
     }
   });
 
-  const totalScore = (correct * cfg.pos) - (incorrect * cfg.neg);
+  const totalScore = Math.round(((correct * cfg.pos) - (incorrect * cfg.neg)) * 100) / 100;
   const maxPossible = total * cfg.pos;
   const pct = Math.max(0, Math.round((totalScore / maxPossible) * 100));
 
@@ -1000,7 +1000,7 @@ function renderGrandTestBreakdown(subjectMap) {
       <td class="py-2.5 px-3">${s.attempted}</td>
       <td class="py-2.5 px-3 font-semibold text-emerald-600">${s.correct}</td>
       <td class="py-2.5 px-3 font-semibold text-rose-600">${s.incorrect}</td>
-      <td class="py-2.5 px-3 font-bold ${s.score >= 0 ? 'text-slate-900' : 'text-rose-600'}">${s.score}</td>
+      <td class="py-2.5 px-3 font-bold ${s.score >= 0 ? 'text-slate-900' : 'text-rose-600'}">${Math.round(s.score * 100) / 100}</td>
       <td class="py-2.5 px-3 font-semibold text-slate-700">${acc}%</td>
     `;
     tbody.appendChild(tr);
@@ -2665,7 +2665,7 @@ function stEnsureTopics() {
   if (ST.loading) return ST.loading;
   ST.loading = new Promise(res => {
     const s = document.createElement('script');
-    s.src = 'data/topics.js?v=20261118i';
+    s.src = 'data/topics.js?v=20261118j';
     s.onload = () => res(window.TOPIC_DATA || null);
     s.onerror = () => { ST.loading = null; res(null); };
     document.head.appendChild(s);
