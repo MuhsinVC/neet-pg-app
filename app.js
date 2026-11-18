@@ -60,7 +60,7 @@ const SUBJECT_CATEGORIES = {
 // -------------------------------------------------------------
 // LAZY PER-SUBJECT QUESTION LOADING (home page loads only the index)
 // -------------------------------------------------------------
-const DATA_VERSION = '20261118j';
+const DATA_VERSION = '20261118k';
 const REPO_ISSUES_URL = 'https://github.com/MuhsinVC/neet-pg-app/issues/new';
 const _subjectLoads = {};
 
@@ -220,7 +220,18 @@ function loadUserData() {
 }
 
 function saveUserData() {
-  localStorage.setItem('MEDAIDE_MASTER_19_STATE_V3', JSON.stringify(state.userData));
+  const KEY = 'MEDAIDE_MASTER_19_STATE_V3';
+  try {
+    localStorage.setItem(KEY, JSON.stringify(state.userData));
+  } catch (e) {
+    // storage full: make the data smaller once and try again
+    let ok = false;
+    try { storageCompact(); localStorage.setItem(KEY, JSON.stringify(state.userData)); ok = true; } catch (e2) {}
+    if (!ok && !state._storageWarned) {
+      state._storageWarned = true;
+      alert('Storage on this device is full, so your latest progress could not be saved.\n\nPlease copy a backup code now (Quick Actions → Device Storage & Backup), then remove old entries from the 20th Notebook to free space.');
+    }
+  }
   updateStatsHeader();
 }
 
@@ -318,6 +329,8 @@ function getFilteredQuestions(questions) {
 // VIEW SWITCHING
 // -------------------------------------------------------------
 function switchView(viewName) {
+  if (!navLeaveOk(viewName)) return;
+  navPush(viewName);
   state.currentView = viewName;
   const views = ['home', 'subject', 'grand-test', 'rapid-fire', 'theory', 'quiz', 'post-test', 'srs', 'notebook', 'strengths', 'daily'];
   
@@ -565,6 +578,7 @@ function launchRapidFireNow(scope, targetId) {
   state.rfScope = scope;
   state.rfStreak = 0;
   state.rfAnsweredRecord = [];
+  state._rfAnsweredIdx = -1;
   state.userAnswers = {};
   state.elapsedSeconds = 0;
 
@@ -753,7 +767,7 @@ function startCountdownTimer() {
     state.elapsedSeconds++;
 
     if (state.gtSecondsRemaining <= 0) {
-      clearInterval(state.timerInterval);
+      clearInterval(state.timerInterval); state.timerInterval = null;
       alert("Time is up! Submitting your Grand Test automatically.");
       submitGrandTest();
       return;
@@ -1083,6 +1097,7 @@ function startTimer() {
 
 function stopTimer() {
   if (state.timerInterval) clearInterval(state.timerInterval);
+  state.timerInterval = null;
 }
 
 function formatTime(totalSecs) {
@@ -1271,9 +1286,11 @@ function selectOption(optKey) {
     return;
   }
 
+  if (state.quizMode === 'RAPID_FIRE' && state._rfAnsweredIdx === state.currentQIndex) return; // already answered: further taps do nothing
   state.userAnswers[q.id] = optKey;
 
   if (state.quizMode === 'RAPID_FIRE') {
+    state._rfAnsweredIdx = state.currentQIndex;
     const isCorrect = optKey === q.correct_option;
     const sId = q.subject_id || (state.activeSubject ? state.activeSubject.subject_id : 'GENERAL');
 
@@ -1827,7 +1844,7 @@ function renderSrsView() {
         <div class="flex items-center space-x-2">
           ${overdueBadge}
           <span class="bg-slate-100 text-slate-600 text-[10px] font-bold px-2 py-0.5 rounded-md whitespace-nowrap">${srsStepLabel(item.srs)}</span>
-          <span class="text-[11px] font-semibold text-slate-400">${item.subjectId}</span>
+          <span class="text-[11px] font-semibold text-slate-400">${nbSubjName(item.question.subject_id || item.subjectId)}</span>
           <span class="text-[11px] text-slate-400">• ${q.exam_source}</span>
         </div>
         <h5 class="text-xs sm:text-sm font-semibold text-slate-900 truncate">${q.question}</h5>
@@ -1908,9 +1925,19 @@ function startSingleQuestionDrill(qId) {
 // -------------------------------------------------------------
 // 20TH NOTEBOOK (ALL TOPICS MISTAKE VAULT)
 // -------------------------------------------------------------
+function nbLeanCopy(q) {
+  const e = q.explanation || {};
+  const c = { explanation: { rationale: e.rationale || '', high_yield_pearl: e.high_yield_pearl || '' } };
+  ['id', 'question', 'options', 'correct_option', 'exam_source', 'topic', 'image_url', 'image_credit', 'question_type', 'subject_id'].forEach(k => { if (q[k] != null) c[k] = q[k]; });
+  return c;
+}
+function storageCompact() {
+  Object.values(state.userData.mistakes || {}).forEach(m => { if (m && m.q) m.q = nbLeanCopy(m.q); });
+  if (Array.isArray(state.userData.history) && state.userData.history.length > 300) state.userData.history = state.userData.history.slice(-300);
+}
 function recordMistake(q, subjectId, userChoice) {
   state.userData.mistakes[q.id] = {
-    q: q,
+    q: nbLeanCopy(q),
     subjectId: subjectId,
     userChoice: userChoice,
     lastWrongDate: new Date().toISOString()
@@ -1938,7 +1965,7 @@ function nbRenderMistakes() {
     btn.className = `px-3 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition ${
       isAct ? 'bg-amber-600 text-white font-bold shadow-sm' : 'border border-slate-200 text-slate-600 hover:bg-slate-100'
     }`;
-    btn.textContent = sId === 'ALL' ? `All (${mistakes.length})` : sId;
+    btn.textContent = sId === 'ALL' ? `All (${mistakes.length})` : nbSubjName(sId);
     btn.onclick = () => {
       state.selectedNotebookSubjectId = sId;
       renderNotebookView();
@@ -1984,7 +2011,7 @@ function nbRenderMistakes() {
     card.innerHTML = `
       <div class="flex items-center justify-between">
         <div class="flex items-center space-x-2">
-          <span class="bg-amber-100 text-amber-800 text-[11px] font-bold px-2 py-0.5 rounded-md">${m.subjectId}</span>
+          <span class="bg-amber-100 text-amber-800 text-[11px] font-bold px-2 py-0.5 rounded-md">${nbSubjName(m.subjectId)}</span>
           <span class="text-xs font-semibold text-slate-500">${q.exam_source}</span>
         </div>
         <div class="flex items-center gap-1"><span class="text-[11px] text-slate-400">${new Date(m.lastWrongDate).toLocaleDateString()}</span>
@@ -2401,18 +2428,22 @@ function exportSyncCode() {
 function importSyncCode() {
   const raw = document.getElementById('sync-textarea').value.trim();
   if (!raw) return;
-  try {
-    const parsed = JSON.parse(raw);
-    state.userData = parsed;
-    ['practice', 'mistakes', 'srs', 'why'].forEach(k => { if (!state.userData[k] || typeof state.userData[k] !== 'object') state.userData[k] = {}; });
-    if (!Array.isArray(state.userData.history)) state.userData.history = [];
-    saveUserData();
-    toggleSyncModal();
-    alert("Progress restored successfully!");
-    renderSubjectsGrid();
-  } catch (e) {
-    alert("Invalid backup code format.");
+  let parsed;
+  try { parsed = JSON.parse(raw); } catch (e) { alert('This is not a backup code. Copy the whole code from "Copy backup code" on the other device and paste it here.'); return; }
+  if (parsed && parsed.kind === 'answer-log') { alert('This is an answer log file, not a backup code. Restore it from Settings → Answer log → Restore log.'); return; }
+  const KEYS = ['practice', 'mistakes', 'srs', 'history', 'plan', 'why', 'confidence', 'bookmarks', 'revPrefs', 'srsPrefs'];
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) || !KEYS.some(k => k in parsed)) {
+    alert('This does not look like a MedPrepAide backup code, so nothing was changed.'); return;
   }
+  const n = o => (o && typeof o === 'object') ? Object.keys(o).length : 0;
+  if (!confirm('Replace all progress on this device with this backup?\n\nThe backup has ' + n(parsed.practice) + ' practice answers, ' + n(parsed.mistakes) + ' Notebook entries, ' + n(parsed.srs) + ' review cards' + (parsed.plan ? ' and a study plan' : '') + '.\n\nThe answer log on this device is not changed.')) return;
+  state.userData = parsed;
+  ['practice', 'mistakes', 'srs', 'why'].forEach(k => { if (!state.userData[k] || typeof state.userData[k] !== 'object') state.userData[k] = {}; });
+  if (!Array.isArray(state.userData.history)) state.userData.history = [];
+  saveUserData();
+  toggleSyncModal();
+  alert("Progress restored successfully!");
+  renderSubjectsGrid();
 }
 
 // -------------------------------------------------------------
@@ -2665,7 +2696,7 @@ function stEnsureTopics() {
   if (ST.loading) return ST.loading;
   ST.loading = new Promise(res => {
     const s = document.createElement('script');
-    s.src = 'data/topics.js?v=20261118j';
+    s.src = 'data/topics.js?v=20261118k';
     s.onload = () => res(window.TOPIC_DATA || null);
     s.onerror = () => { ST.loading = null; res(null); };
     document.head.appendChild(s);
@@ -3037,9 +3068,10 @@ async function plProgress() {
   const todayTarget = tgt.PYQ + tgt.ADD + tgt.REV;
   const expYesterday = plExpectedThrough(plan, Math.min(dayIdx - 1, end - 1));
   const expToday = plExpectedThrough(plan, Math.min(dayIdx, end - 1));
-  const backlog = Math.max(0, expYesterday - (done - todayRecs.length));
+  const backlog = (dayIdx < 0 || dayIdx >= end) ? 0 : Math.max(0, expYesterday - (done - todayRecs.length));
   let status, msg;
   if (dayIdx < 0) { status = 'orange'; msg = 'Your plan starts on ' + plFmt(plan.start) + '.'; }
+  else if (dayIdx >= end) { status = 'orange'; msg = 'Your plan ended on ' + plFmt(plAddDays(plan.start, end - 1)) + '. Make a new plan to keep going.'; }
   else if (backlog > Math.max(1, 0.1 * (todayTarget || 1))) {
     status = 'red';
     const days = todayTarget ? (backlog / todayTarget).toFixed(1) : '';
@@ -3605,7 +3637,7 @@ async function dtRenderLanding() {
   // status
   if (P) {
     const col = { red: 'bg-rose-50 border-rose-200 text-rose-800', orange: 'bg-amber-50 border-amber-200 text-amber-800', green: 'bg-emerald-50 border-emerald-200 text-emerald-800' }[P.status];
-    h += '<div class="rounded-2xl border p-4 ' + col + '"><div class="flex items-center justify-between gap-3 flex-wrap"><div><div class="flex items-center gap-2 font-bold text-sm"><span class="dt-light dt-' + P.status + '"></span>' + DT_WORD[P.status] + '</div>' +
+    h += '<div class="rounded-2xl border p-4 ' + col + '"><div class="flex items-center justify-between gap-3 flex-wrap"><div><div class="flex items-center gap-2 font-bold text-sm"><span class="dt-light dt-' + (P.block ? P.status : 'none') + '"></span>' + (P.block ? DT_WORD[P.status] : P.dayIdx < 0 ? 'Not started yet' : 'Plan finished') + '</div>' +
       '<p class="text-xs mt-1 leading-relaxed">' + esc(P.msg) + '</p></div>' +
       (P.backlog ? '<button onclick="dtCatchUp()" class="px-3 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold shrink-0">Catch up ' + P.backlog + '</button>' : '') + '</div></div>';
   }
@@ -3617,6 +3649,11 @@ async function dtRenderLanding() {
     '<div><div class="text-sm font-bold text-slate-900">Today\'s questions</div><div class="text-[11px] text-slate-500">New PYQs and Additional questions for today\'s subject, then revision</div></div></div>';
   if (!P) {
     h += '<p class="text-xs text-slate-600">No study plan yet. The plan sets your exam date, cycles and how many questions a day.</p><button onclick="planOpen()" class="mt-auto w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-bold">Set up study plan</button>';
+  } else if (!P.block) {
+    const future = P.dayIdx < 0;
+    h += '<p class="text-xs text-slate-600">' + (future ? 'Your plan starts on <b>' + plFmt(P.plan.start) + '</b> (in ' + (-P.dayIdx) + ' day' + (P.dayIdx === -1 ? '' : 's') + '). Daily questions begin then; you can still practise and review in the meantime.' :
+      'Your plan has finished. Make a new plan to get daily questions again.') + '</p>' +
+      '<button onclick="planOpen()" class="mt-auto w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-bold">' + (future ? 'Start earlier: edit plan' : 'Make a new plan') + '</button>';
   } else {
     const done = dtDoneToday(P), tgt = P.todayTarget, left = Math.max(0, tgt - done), pct = tgt ? Math.min(100, Math.round(100 * done / tgt)) : 0;
     const bar = { red: 'bg-rose-500', orange: 'bg-amber-500', green: 'bg-emerald-500' }[P.status];
@@ -3872,3 +3909,67 @@ function rvMarkLabel(ok, skipped) {
   if (ok) return gt ? 'Correct (+' + num(cfg.pos) + ')' : 'Correct';
   return gt ? 'Incorrect (−' + num(cfg.neg) + ')' : 'Incorrect';
 }
+
+
+// ================= 20261118k =================
+function nbSubjName(id) { if (!id || id === 'GENERAL') return 'General'; const s = (state.curriculum.subjects || []).find(x => x.subject_id === id); return s ? s.name : id; }
+
+// ---- leaving a running Grand Test ----
+function navLeaveOk(viewName) {
+  if (state.currentView === 'quiz' && state.quizMode === 'GRAND_TEST' && state.timerInterval && viewName !== 'quiz' && viewName !== 'post-test') {
+    if (!confirm('Leave the Grand Test?\n\nThe test will stop and your answers will not be scored. Press Cancel to keep going.')) return false;
+    stopTimer();
+  }
+  return true;
+}
+
+// ---- Back button inside the app ----
+let NAV_POPPING = false;
+function navPush(viewName) {
+  if (NAV_POPPING || viewName === state.currentView) return;
+  try { history.pushState({ v: viewName }, ''); } catch (e) {}
+}
+try { history.replaceState({ v: 'home' }, ''); } catch (e) {}
+function navCloseOverlay() {
+  const open = id => { const el = document.getElementById(id); return el && !el.classList.contains('hidden'); };
+  if (open('image-modal')) { closeImageModal(); return true; }
+  if (open('palette-modal')) { togglePaletteModal(); return true; }
+  if (open('about-modal')) { toggleAboutModal(); return true; }
+  if (open('dt-modal')) { dtCloseStatus(); return true; }
+  if (open('plan-modal')) { planClose(); return true; }
+  if (open('sync-modal')) { toggleSyncModal(); return true; }
+  if (open('settings-modal')) { toggleSettingsModal(); return true; }
+  if (open('fab-menu-popover')) { toggleFabMenu(); return true; }
+  return false;
+}
+function navMenuFor() {
+  if (state.quizMode === 'GRAND_TEST') return 'grand-test';
+  if (state.quizMode === 'RAPID_FIRE') return state.dtCtx && state.dtCtx.kind ? 'daily' : 'rapid-fire';
+  if (state.quizMode === 'PRACTICE') return state.activeSubject ? 'subject' : 'home';
+  if (state.quizMode === 'SRS') return 'srs';
+  return 'home';
+}
+function navGo(v) {
+  NAV_POPPING = true;
+  try {
+    if (v === 'daily') dtLanding();
+    else if (v === 'home') goToHome();
+    else if (v === 'subject' && !state.activeSubject) goToHome();
+    else switchView(v);
+  } finally { NAV_POPPING = false; }
+}
+window.addEventListener('popstate', e => {
+  const keep = () => { try { history.pushState({ v: state.currentView }, ''); } catch (x) {} };
+  if (navCloseOverlay()) { keep(); return; }
+  if (state.currentView === 'quiz') {
+    if (state.quizMode === 'GRAND_TEST' && state.timerInterval) {
+      if (!confirm('Leave the Grand Test?\n\nThe test will stop and your answers will not be scored. Press Cancel to keep going.')) { keep(); return; }
+      stopTimer(); navGo('grand-test'); return;
+    }
+    if (state.quizMode === 'RAPID_FIRE') { NAV_POPPING = true; try { finishRapidFire(); } finally { NAV_POPPING = false; } if (state.currentView !== 'quiz') { try { history.pushState({ v: state.currentView }, ''); } catch (x) {} } return; }
+    stopTimer(); navGo(navMenuFor()); return;
+  }
+  let v = (e.state && e.state.v) || 'home';
+  if (v === 'quiz' || v === 'post-test') v = navMenuFor();
+  navGo(v);
+});
