@@ -60,7 +60,7 @@ const SUBJECT_CATEGORIES = {
 // -------------------------------------------------------------
 // LAZY PER-SUBJECT QUESTION LOADING (home page loads only the index)
 // -------------------------------------------------------------
-const DATA_VERSION = '20261118h';
+const DATA_VERSION = '20261118i';
 const REPO_ISSUES_URL = 'https://github.com/MuhsinVC/neet-pg-app/issues/new';
 const _subjectLoads = {};
 
@@ -1549,8 +1549,9 @@ function renderReviewList(questions) {
     const userChoice = state.userAnswers[q.id];
     const isCorrect = userChoice === q.correct_option;
     const card = document.createElement('div');
+    const skipped = !userChoice;
     card.className = `bg-white border rounded-2xl p-5 sm:p-6 shadow-sm space-y-4 ${
-      isCorrect ? 'border-emerald-200 bg-emerald-50/20' : 'border-rose-200 bg-rose-50/20'
+      isCorrect ? 'border-emerald-200 bg-emerald-50/20' : skipped ? 'border-slate-200 bg-slate-50/40' : 'border-rose-200 bg-rose-50/20'
     }`;
 
     let optionsHtml = '';
@@ -1587,11 +1588,11 @@ function renderReviewList(questions) {
     card.innerHTML = `
       <div class="flex items-center justify-between">
         <div class="flex items-center space-x-2">
-          <span class="w-6 h-6 rounded-full ${isCorrect ? 'bg-emerald-600' : 'bg-rose-600'} text-white flex items-center justify-center text-xs font-bold">
+          <span class="w-6 h-6 rounded-full ${isCorrect ? 'bg-emerald-600' : skipped ? 'bg-slate-400' : 'bg-rose-600'} text-white flex items-center justify-center text-xs font-bold">
             ${idx + 1}
           </span>
-          <span class="text-xs font-bold ${isCorrect ? 'text-emerald-700' : 'text-rose-700'}">
-            ${isCorrect ? 'Correct (+4)' : 'Incorrect (-1)'}
+          <span class="text-xs font-bold ${isCorrect ? 'text-emerald-700' : skipped ? 'text-slate-500' : 'text-rose-700'}">
+            ${rvMarkLabel(isCorrect, skipped)}
           </span>
         </div>
         <span class="flex items-center gap-2 flex-wrap justify-end">${gtTimed ? gtTimeChip(q.id) : ''}${bmBtnHtml(q.id, q.subject_id)}<span class="text-[11px] font-semibold text-slate-400">${q.exam_source}</span></span>
@@ -2664,7 +2665,7 @@ function stEnsureTopics() {
   if (ST.loading) return ST.loading;
   ST.loading = new Promise(res => {
     const s = document.createElement('script');
-    s.src = 'data/topics.js?v=20261118h';
+    s.src = 'data/topics.js?v=20261118i';
     s.onload = () => res(window.TOPIC_DATA || null);
     s.onerror = () => { ST.loading = null; res(null); };
     document.head.appendChild(s);
@@ -3862,4 +3863,12 @@ async function pwaRenderSettings() {
   else inst = 'To install, use the browser menu: <b>Install app</b> or <b>Add to Home screen</b>.';
   box.innerHTML = '<div class="bg-emerald-50/60 border border-emerald-200 rounded-xl p-3.5 space-y-2.5"><div class="text-xs font-bold text-slate-800">Offline &amp; install</div>' +
     '<div class="text-[11px] text-slate-700 leading-relaxed">' + status + '</div><div class="text-[11px] text-slate-700">' + inst + '</div></div>';
+}
+
+function rvMarkLabel(ok, skipped) {
+  const gt = state.quizMode === 'GRAND_TEST' && state.gtConfig, cfg = state.gtConfig || {};
+  const num = n => String(Math.round(n * 100) / 100);
+  if (skipped) return gt ? 'Not attempted (0)' : 'Not attempted';
+  if (ok) return gt ? 'Correct (+' + num(cfg.pos) + ')' : 'Correct';
+  return gt ? 'Incorrect (−' + num(cfg.neg) + ')' : 'Incorrect';
 }
