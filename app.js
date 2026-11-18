@@ -60,7 +60,7 @@ const SUBJECT_CATEGORIES = {
 // -------------------------------------------------------------
 // LAZY PER-SUBJECT QUESTION LOADING (home page loads only the index)
 // -------------------------------------------------------------
-const DATA_VERSION = '20261118f';
+const DATA_VERSION = '20261118g';
 const REPO_ISSUES_URL = 'https://github.com/MuhsinVC/neet-pg-app/issues/new';
 const _subjectLoads = {};
 
@@ -319,7 +319,7 @@ function getFilteredQuestions(questions) {
 // -------------------------------------------------------------
 function switchView(viewName) {
   state.currentView = viewName;
-  const views = ['home', 'subject', 'grand-test', 'rapid-fire', 'theory', 'quiz', 'post-test', 'srs', 'notebook', 'strengths'];
+  const views = ['home', 'subject', 'grand-test', 'rapid-fire', 'theory', 'quiz', 'post-test', 'srs', 'notebook', 'strengths', 'daily'];
   
   views.forEach(v => {
     const el = document.getElementById(`view-${v}`);
@@ -349,6 +349,7 @@ function switchView(viewName) {
   if (viewName === 'srs') ensureSubjects(dueSrsSubjectIds()).then(renderSrsView);
   if (viewName === 'notebook') renderNotebookView();
   if (viewName === 'strengths') renderStrengthsView();
+  if (viewName === 'daily') dtRenderLanding();
 
   window.scrollTo({ top: 0, behavior: 'smooth' });
   setTimeout(() => lucide.createIcons(), 50);
@@ -635,7 +636,7 @@ function toggleRfInstant() {
 function finishRapidFire() {
   stopTimer();
   if (state.rfAnsweredRecord.length === 0) {
-    switchView('rapid-fire');
+    switchView(state.dtCtx && state.dtCtx.kind ? 'daily' : 'rapid-fire');
     return;
   }
 
@@ -686,6 +687,7 @@ async function startGrandTest(examType) {
 
 function startGrandTestNow(examType) {
   state.quizMode = 'GRAND_TEST';
+  state.gtExamType = examType;
   state.dtCtx = null;
   state.userAnswers = {};
   state.markedForReview = {};
@@ -936,9 +938,9 @@ function submitGrandTest() {
       subjectMap[sId].incorrect++;
       subjectMap[sId].score -= cfg.neg;
 
-      // Register mistakes into 20th Notebook and Spaced Repetition queue
+      // Register mistakes into 20th Notebook and (if switched on in Settings) the Spaced Review queue
       recordMistake(q, sId, chosen);
-      scheduleSrsReview(q.id, sId, false);
+      scheduleSrsReview(q.id, sId, false, srsSourceNow());
     }
   });
 
@@ -1252,8 +1254,12 @@ function selectOption(optKey) {
     state.userAnswers[q.id] = optKey;
     const ok = optKey === q.correct_option;
     state.userData.practice[q.id] = { r: ok ? 'C' : 'W', d: new Date().toISOString() };
-    // Wrong answers go to the 20th Notebook; practice never touches Spaced Review
-    if (!ok) recordMistake(q, q.subject_id || (state.activeSubject ? state.activeSubject.subject_id : 'GENERAL'), optKey);
+    // Wrong answers go to the 20th Notebook; Spaced Review only if switched on in Settings (off by default)
+    if (!ok) {
+      const pSid = q.subject_id || (state.activeSubject ? state.activeSubject.subject_id : 'GENERAL');
+      recordMistake(q, pSid, optKey);
+      scheduleSrsReview(q.id, pSid, false, 'practice');
+    }
     pgLog(q, optKey, ok, 'PRACTICE');
     saveUserData();
     renderCurrentQuestion();
@@ -1273,7 +1279,7 @@ function selectOption(optKey) {
     } else {
       state.rfStreak = 0;
       recordMistake(q, sId, optKey);
-      scheduleSrsReview(q.id, sId, false);
+      scheduleSrsReview(q.id, sId, false, srsSourceNow());
     }
 
     pgLog(q, optKey, isCorrect, 'RAPID_FIRE');
@@ -1635,36 +1641,119 @@ function retakeCurrentUnit() {
 // -------------------------------------------------------------
 // SPACED REPETITION (SRS) & OVERDUE DAYS LOGIC
 // -------------------------------------------------------------
-function scheduleSrsReview(qId, subjectId, isCorrect) {
-  let record = state.userData.srs[qId];
-  const now = Date.now();
-
-  if (!record) {
-    record = {
-      subjectId: subjectId,
-      reps: 0,
-      interval: 1, // days
-      lastReviewedDate: new Date().toISOString(),
-      nextReviewDate: new Date(now + 1 * 86400000).toISOString()
-    };
+const SRS_ALL_STEPS = [1, 3, 7, 14];
+const SRS_DEFAULT_SRC = { daily: true, rf: true, revdrill: true, gt: true, mini: true, rev: true, practice: false };
+const SRS_SRC_LABEL = [
+  ['daily', 'Daily Target', 'including Catch up and Do more'],
+  ['rf', 'Rapid Fire Drill', ''],
+  ['revdrill', 'Revision drill', ''],
+  ['gt', 'Full Grand Tests', 'NEET PG and INI-CET'],
+  ['mini', 'Mini-GTs', 'NEET PG and INI-CET'],
+  ['rev', 'Revision tests', 'Revision GT, Revision Mini-GT, Custom'],
+  ['practice', 'Practice', 'subject units']
+];
+function srsPrefs() {
+  const p = state.userData.srsPrefs || {};
+  let steps = (Array.isArray(p.steps) ? p.steps : SRS_ALL_STEPS).filter(x => SRS_ALL_STEPS.includes(x)).sort((a, b) => a - b);
+  if (!steps.length) steps = [1];
+  return { steps, src: Object.assign({}, SRS_DEFAULT_SRC, p.src || {}) };
+}
+function srsWants(src) { return !!srsPrefs().src[src]; }
+// which mode is answering right now (null = a Spaced Review session or a single-question review)
+function srsSourceNow() {
+  if (state.quizMode === 'RAPID_FIRE') {
+    if (state.dtCtx && state.dtCtx.kind) return 'daily';
+    if (state.rfTitle === '⚡ Revision Drill') return 'revdrill';
+    return 'rf';
   }
-
-  if (isCorrect) {
-    record.reps += 1;
-    // Spaced progression: 1 -> 3 -> 7 -> 14 -> 30 days
-    if (record.reps === 1) record.interval = 3;
-    else if (record.reps === 2) record.interval = 7;
-    else if (record.reps === 3) record.interval = 14;
-    else record.interval = Math.min(60, record.interval * 2);
+  if (state.quizMode === 'GRAND_TEST') {
+    const k = state.gtExamType || '';
+    if (k === 'PRESET') return 'rev';
+    return /MINI/.test(k) ? 'mini' : 'gt';
+  }
+  if (state.quizMode === 'PRACTICE') return 'practice';
+  return null;
+}
+function srsDayStart(days) { const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() + days); return d.toISOString(); }
+function srsStepOf(rec, steps) { steps = steps || srsPrefs().steps; return Math.min(steps.length, Math.max(1, steps.filter(s => s <= (rec.interval || 0)).length)); }
+function srsNextStep(rec, steps) { steps = steps || srsPrefs().steps; const n = steps.find(s => s > (rec.interval || 0)); return n == null ? null : n; }
+function scheduleSrsReview(qId, subjectId, isCorrect, source) {
+  const steps = srsPrefs().steps;
+  let rec = state.userData.srs[qId];
+  if (!isCorrect) {
+    if (source && !srsWants(source)) return;
+    if (!rec) rec = { subjectId: subjectId, reps: 0 };
+    rec.reps = 0;
+    rec.interval = steps[0];
   } else {
-    // Reset on error
-    record.reps = 0;
-    record.interval = 1;
+    if (!rec) return; // a right answer never adds a new review
+    const next = srsNextStep(rec, steps);
+    if (next == null) {
+      // passed the last ticked step: retire (kept in srsDone; still in the Notebook and the answer log)
+      if (!state.userData.srsDone || typeof state.userData.srsDone !== 'object') state.userData.srsDone = {};
+      state.userData.srsDone[qId] = Object.assign({}, rec, { retired: new Date().toISOString() });
+      delete state.userData.srs[qId];
+      return;
+    }
+    rec.reps = (rec.reps || 0) + 1;
+    rec.interval = next;
   }
+  rec.lastReviewedDate = new Date().toISOString();
+  rec.nextReviewDate = srsDayStart(rec.interval);
+  state.userData.srs[qId] = rec;
+  if (state.userData.srsDone && state.userData.srsDone[qId]) delete state.userData.srsDone[qId];
+}
+function srsDueRecs(beforeTs) {
+  const t = beforeTs || Date.now();
+  return Object.entries(state.userData.srs || {}).filter(([id, r]) => new Date(r.nextReviewDate).getTime() <= t);
+}
+// due at any time today (used to keep Daily Target revision picks apart from Spaced Review)
+function srsDueIdsToday() { return srsDueRecs(new Date(srsDayStart(1)).getTime() - 1).map(e => e[0]); }
+function srsNextDueDate() {
+  const ts = Object.values(state.userData.srs || {}).map(r => new Date(r.nextReviewDate).getTime()).filter(x => x > Date.now());
+  return ts.length ? new Date(Math.min(...ts)) : null;
+}
 
-  record.lastReviewedDate = new Date().toISOString();
-  record.nextReviewDate = new Date(now + record.interval * 86400000).toISOString();
-  state.userData.srs[qId] = record;
+// ---- Settings: Spaced Review section ----
+function srsSaveSteps() {
+  const steps = SRS_ALL_STEPS.filter(s => { const el = document.getElementById('srs-step-' + s); return el && el.checked; });
+  const msg = document.getElementById('srs-steps-msg');
+  if (!steps.length) {
+    const el = document.getElementById('srs-step-1'); if (el) el.checked = true;
+    if (msg) msg.textContent = 'Keep at least one step ticked.';
+    steps.push(1);
+  } else if (msg) msg.textContent = '';
+  state.userData.srsPrefs = Object.assign({}, state.userData.srsPrefs || {}, { steps });
+  saveUserData(); srsStepsSummary();
+}
+function srsSaveSrc(k, on) {
+  const p = state.userData.srsPrefs || {};
+  state.userData.srsPrefs = Object.assign({}, p, { src: Object.assign({}, p.src || {}, { [k]: !!on }) });
+  saveUserData();
+}
+function srsResetPrefs() { delete state.userData.srsPrefs; saveUserData(); srsRenderSettings(); }
+function srsStepsSummary() {
+  const el = document.getElementById('srs-steps-sum'); if (!el) return;
+  const s = srsPrefs().steps;
+  el.textContent = 'A wrong answer comes back after ' + s.map(x => x + (x === 1 ? ' day' : ' days')).join(', then ') + '. Right at the last step and it leaves the queue.';
+}
+function srsRenderSettings() {
+  const box = document.getElementById('settings-srs'); if (!box) return;
+  const P = srsPrefs();
+  const chk = (id, on, onchg) => '<input id="' + id + '" type="checkbox" ' + (on ? 'checked ' : '') + 'onchange="' + onchg + '" class="w-4 h-4 accent-rose-600 shrink-0">';
+  box.innerHTML = '<div class="bg-rose-50/60 border border-rose-200 rounded-xl p-3.5 space-y-3">' +
+    '<div class="flex items-center justify-between gap-2"><div class="text-xs font-bold text-slate-800">Spaced Review</div>' +
+    '<button onclick="srsResetPrefs()" class="text-[11px] font-semibold text-slate-500 hover:text-slate-800 underline">Reset to default</button></div>' +
+    '<div><div class="text-[11px] font-bold text-slate-700">Review steps</div>' +
+    '<div class="grid grid-cols-4 gap-2 mt-1.5">' + SRS_ALL_STEPS.map(s =>
+      '<label class="flex items-center justify-center gap-1.5 bg-white border border-rose-200 rounded-lg py-1.5 text-xs font-semibold text-slate-800 cursor-pointer">' +
+      chk('srs-step-' + s, P.steps.includes(s), 'srsSaveSteps()') + s + (s === 1 ? ' day' : ' days') + '</label>').join('') + '</div>' +
+    '<p id="srs-steps-sum" class="text-[11px] text-slate-600 leading-relaxed mt-1.5"></p><p id="srs-steps-msg" class="text-[11px] font-semibold text-rose-700"></p></div>' +
+    '<div><div class="text-[11px] font-bold text-slate-700">Add wrong answers from</div><div class="space-y-1.5 mt-1.5">' +
+    SRS_SRC_LABEL.map(([k, t, sub]) => '<label class="flex items-center gap-2 text-xs text-slate-800 cursor-pointer">' + chk('srs-src-' + k, P.src[k], 'srsSaveSrc(\'' + k + '\', this.checked)') +
+      '<span><b class="font-semibold">' + t + '</b>' + (sub ? ' <span class="text-slate-500">(' + sub + ')</span>' : '') + '</span></label>').join('') + '</div>' +
+    '<p class="text-[11px] text-slate-500 leading-relaxed mt-1.5">Changes apply to answers from now on; questions already in the queue stay. Wrong answers from every mode still go to the 20th Notebook.</p></div></div>';
+  srsStepsSummary();
 }
 
 function getDueSrsQuestions() {
@@ -1693,6 +1782,7 @@ function renderSrsView() {
   if (!container) return;
   container.innerHTML = '';
   rmUndoBanner(container, 'srs');
+  { const hs = document.getElementById('srs-hub-steps'); if (hs) { const st = srsPrefs().steps; hs.textContent = st.length > 1 ? st.slice(0, -1).join(', ') + ' and ' + st[st.length - 1] : String(st[0]); } }
 
   const dueList = getDueSrsQuestions();
 
@@ -1704,7 +1794,7 @@ function renderSrsView() {
           <i data-lucide="check-circle" class="w-6 h-6"></i>
         </div>
         <h4 class="text-base font-bold text-slate-900">All Spaced Reviews Up to Date!</h4>
-        <p class="text-xs text-slate-500 max-w-sm mx-auto">You have cleared all active review items. Questions you get wrong in Unit Tests or Grand Tests will appear here for timed daily recall.</p>
+        <p class="text-xs text-slate-500 max-w-sm mx-auto">Nothing is due. Questions you get wrong come back here after ${srsPrefs().steps.join(', ')} days (change the steps and which modes count in Settings).${srsNextDueDate() ? ' Next review: ' + srsNextDueDate().toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) + '.' : ''}</p>
       </div>
     `);
     lucide.createIcons();
@@ -1726,6 +1816,7 @@ function renderSrsView() {
       <div class="space-y-1 min-w-0">
         <div class="flex items-center space-x-2">
           ${overdueBadge}
+          <span class="bg-slate-100 text-slate-600 text-[10px] font-bold px-2 py-0.5 rounded-md whitespace-nowrap">${srsStepLabel(item.srs)}</span>
           <span class="text-[11px] font-semibold text-slate-400">${item.subjectId}</span>
           <span class="text-[11px] text-slate-400">• ${q.exam_source}</span>
         </div>
@@ -2486,6 +2577,7 @@ function toggleSettingsModal() {
   if (!m.classList.contains('hidden')) {
     const cb = document.getElementById('pg-toggle'); if (cb) cb.checked = pgOn();
     rvRenderSettings();
+    srsRenderSettings();
     alogAll().then(a => { const el = document.getElementById('pg-log-count'); if (el) el.textContent = a.length; });
   }
 }
@@ -2555,7 +2647,7 @@ function stEnsureTopics() {
   if (ST.loading) return ST.loading;
   ST.loading = new Promise(res => {
     const s = document.createElement('script');
-    s.src = 'data/topics.js?v=20261118f';
+    s.src = 'data/topics.js?v=20261118g';
     s.onload = () => res(window.TOPIC_DATA || null);
     s.onerror = () => { ST.loading = null; res(null); };
     document.head.appendChild(s);
@@ -3035,8 +3127,8 @@ async function dtBuildSession(P, catchUp) {
   if (b && b.type === 'S' && (need.PYQ || need.ADD)) study = await dtStudyQuestions(P, need, log);
   else if (b && (need.PYQ || need.ADD)) {
     // revision cycle: PYQ / Additional quotas are filled with revision picks of that type
-    study.list.PYQ = need.PYQ ? await stPickRevision({ count: need.PYQ, types: [0] }) : [];
-    study.list.ADD = need.ADD ? await stPickRevision({ count: need.ADD, types: [1], exclude: study.list.PYQ }) : [];
+    study.list.PYQ = need.PYQ ? await stPickRevision({ count: need.PYQ, types: [0], exclude: srsDueIdsToday() }) : [];
+    study.list.ADD = need.ADD ? await stPickRevision({ count: need.ADD, types: [1], exclude: study.list.PYQ.concat(srsDueIdsToday()) }) : [];
   }
   let revSubjects = null;
   if (b && b.type === 'S') {
@@ -3044,7 +3136,7 @@ async function dtBuildSession(P, catchUp) {
     const earlierStudy = plLayout(P.plan).some(x => x.type === 'S' && x.to <= b.from);
     if (!earlierStudy) { const sched = plSubjectSchedule(P.plan, b); revSubjects = sched.filter(x => x.from <= P.dayIdx).map(x => x.id); }
   }
-  const exclude = study.list.PYQ.concat(study.list.ADD);
+  const exclude = study.list.PYQ.concat(study.list.ADD, srsDueIdsToday());
   const rev = need.REV ? await stPickRevision({ count: need.REV, subjects: revSubjects, types: [0, 1], exclude }) : [];
   const part = {};
   study.list.PYQ.forEach(q => part[q] = 'PYQ'); study.list.ADD.forEach(q => part[q] = 'ADD'); rev.forEach(q => part[q] = 'REV');
@@ -3463,3 +3555,71 @@ document.addEventListener('keydown', function (e) {
   const m = document.getElementById('about-modal');
   if (m && !m.classList.contains('hidden')) m.classList.add('hidden');
 });
+
+function srsStepLabel(rec) {
+  const steps = srsPrefs().steps, k = srsStepOf(rec, steps), nx = srsNextStep(rec, steps);
+  return 'Step ' + k + ' of ' + steps.length + ' · ' + (nx == null ? 'last step' : 'if right: ' + nx + (nx === 1 ? ' day' : ' days'));
+}
+
+// ---------------- Daily Target landing page ----------------
+function dtLanding() { switchView('daily'); }
+async function dtRenderLanding() {
+  const box = document.getElementById('dt-landing'); if (!box) return;
+  const plan = state.userData.plan;
+  const P = plan ? await plProgress() : null;
+  const due = srsDueRecs().length, mins = Math.max(1, Math.round(due * 0.5)), nxt = srsNextDueDate();
+  const esc = s => pgEsc(String(s));
+  let h = '';
+  // header
+  let line = 'Set up a study plan to get a daily number of questions.';
+  if (P) {
+    const b = P.block;
+    if (!b) line = P.dayIdx < 0 ? 'Your plan starts on ' + plFmt(P.plan.start) + '.' : 'Your plan has finished.';
+    else {
+      let subj = '';
+      if (b.type === 'S') { const s = plSubjectSchedule(P.plan, b).find(x => P.dayIdx >= x.from && P.dayIdx < x.to); if (s) subj = ' · Today: ' + plSubjectName(s.id); }
+      line = plBlockName(b) + ', day ' + (P.dayIdx - b.from + 1) + ' of ' + b.days + subj + ' · Exam ' + plFmt(P.plan.target) + ' (' + P.daysLeft + ' days)';
+    }
+  }
+  h += '<div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3"><div><h2 class="text-lg sm:text-xl font-extrabold text-slate-900 flex items-center gap-2"><i data-lucide="target" class="w-5 h-5 text-rose-500"></i>Daily Target</h2>' +
+    '<p class="text-xs sm:text-sm text-slate-500 mt-1">' + esc(line) + '</p></div>' +
+    (plan ? '<button onclick="planOpen()" class="self-start sm:self-auto px-3 py-2 border border-slate-300 hover:bg-slate-100 text-slate-700 rounded-lg text-xs font-semibold">Edit plan</button>' : '') + '</div>';
+  // status
+  if (P) {
+    const col = { red: 'bg-rose-50 border-rose-200 text-rose-800', orange: 'bg-amber-50 border-amber-200 text-amber-800', green: 'bg-emerald-50 border-emerald-200 text-emerald-800' }[P.status];
+    h += '<div class="rounded-2xl border p-4 ' + col + '"><div class="flex items-center justify-between gap-3 flex-wrap"><div><div class="flex items-center gap-2 font-bold text-sm"><span class="dt-light dt-' + P.status + '"></span>' + DT_WORD[P.status] + '</div>' +
+      '<p class="text-xs mt-1 leading-relaxed">' + esc(P.msg) + '</p></div>' +
+      (P.backlog ? '<button onclick="dtCatchUp()" class="px-3 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold shrink-0">Catch up ' + P.backlog + '</button>' : '') + '</div></div>';
+  }
+  if (due > 0 && (!P || P.block)) h += '<div class="flex items-start gap-2 bg-white border border-rose-200 rounded-xl px-4 py-3 text-xs text-rose-900"><i data-lucide="lightbulb" class="w-4 h-4 text-rose-500 shrink-0 mt-0.5"></i><span><b>' + due + ' review' + (due === 1 ? '' : 's') + ' due</b> (about ' + mins + ' min). Doing them first works best: they are the questions you are closest to forgetting.</span></div>';
+  // two main cards
+  h += '<div class="grid grid-cols-1 md:grid-cols-2 gap-4">';
+  // Daily Target card
+  h += '<div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm flex flex-col gap-3"><div class="flex items-center gap-3"><div class="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-600 flex items-center justify-center"><i data-lucide="play" class="w-5 h-5"></i></div>' +
+    '<div><div class="text-sm font-bold text-slate-900">Today\'s questions</div><div class="text-[11px] text-slate-500">New PYQs and Additional questions for today\'s subject, then revision</div></div></div>';
+  if (!P) {
+    h += '<p class="text-xs text-slate-600">No study plan yet. The plan sets your exam date, cycles and how many questions a day.</p><button onclick="planOpen()" class="mt-auto w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-bold">Set up study plan</button>';
+  } else {
+    const done = dtDoneToday(P), tgt = P.todayTarget, left = Math.max(0, tgt - done), pct = tgt ? Math.min(100, Math.round(100 * done / tgt)) : 0;
+    const bar = { red: 'bg-rose-500', orange: 'bg-amber-500', green: 'bg-emerald-500' }[P.status];
+    const row = (t, a, b2, c) => '<div class="bg-slate-50 rounded-lg px-2 py-1.5 text-center"><div class="text-[10px] text-slate-500">' + t + '</div><div class="text-sm font-bold ' + c + '">' + a + '<span class="text-slate-400 font-semibold">/' + b2 + '</span></div></div>';
+    h += '<div><div class="flex items-baseline justify-between"><span class="text-2xl font-extrabold text-slate-900">' + done + '<span class="text-base text-slate-400 font-bold"> / ' + tgt + '</span></span><span class="text-xs text-slate-500">' + (P.block ? (left ? left + ' left' : 'Done for today 🎉') : '') + '</span></div>' +
+      '<div class="h-2 rounded-full bg-slate-100 mt-1.5 overflow-hidden"><div class="h-2 ' + bar + ' rounded-full" style="width:' + pct + '%"></div></div></div>' +
+      '<div class="grid grid-cols-3 gap-2">' + row('PYQ', P.doneToday.PYQ, P.tgt.PYQ, 'text-indigo-700') + row('Additional', P.doneToday.ADD, P.tgt.ADD, 'text-sky-700') + row('Revision', P.doneToday.REV, P.tgt.REV, 'text-emerald-700') + '</div>';
+    if (P.block && left > 0) h += '<button onclick="dtOpen()" class="mt-auto w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2"><i data-lucide="play" class="w-4 h-4"></i>' + (done ? 'Continue Daily Target (' + left + ' left)' : 'Start Daily Target') + '</button>';
+    else if (P.block) h += '<div class="mt-auto bg-emerald-50 border border-emerald-200 rounded-xl p-3 space-y-2"><div class="text-xs text-emerald-900">Today\'s target is done. Feeling keen? Extra questions follow today\'s mix and put you ahead.</div><div class="flex flex-wrap gap-2">' +
+      [10, 20, 30, 50].map(n => '<button onclick="dtMore(' + n + ')" class="px-3 py-1.5 bg-white border border-emerald-300 hover:bg-emerald-100 text-emerald-800 rounded-lg text-xs font-bold">Do ' + n + ' more</button>').join('') + '</div></div>';
+  }
+  h += '</div>';
+  // Spaced Review card
+  h += '<div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm flex flex-col gap-3"><div class="flex items-center gap-3"><div class="w-10 h-10 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center"><i data-lucide="calendar-check" class="w-5 h-5"></i></div>' +
+    '<div><div class="text-sm font-bold text-slate-900">Spaced Review</div><div class="text-[11px] text-slate-500">Questions you got wrong, back after ' + srsPrefs().steps.join(', ') + ' days</div></div></div>' +
+    '<div class="flex items-baseline justify-between"><span class="text-2xl font-extrabold ' + (due ? 'text-rose-600' : 'text-slate-900') + '">' + due + '<span class="text-base text-slate-400 font-bold"> due</span></span><span class="text-xs text-slate-500">' +
+    (due ? 'about ' + mins + ' min' : nxt ? 'next on ' + nxt.toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) : 'queue empty') + '</span></div>' +
+    '<p class="text-[11px] text-slate-500 leading-relaxed">Steps and which modes add questions can be changed in Settings. Daily Target revision skips questions due here today, so nothing is served twice.</p>' +
+    '<button onclick="switchView(\'srs\')" class="mt-auto w-full py-2.5 ' + (due ? 'bg-rose-600 hover:bg-rose-700 text-white' : 'border border-slate-300 hover:bg-slate-100 text-slate-700') + ' rounded-xl text-sm font-bold flex items-center justify-center gap-2"><i data-lucide="calendar-check" class="w-4 h-4"></i>Open Spaced Review</button></div>';
+  h += '</div>';
+  if (P) h += '<p class="text-[11px] text-slate-500 leading-relaxed">Green = ahead, orange = on time, red = behind. Only questions answered from the Daily Target (or Catch up / Do more) count towards the plan.</p>';
+  box.innerHTML = h;
+  setTimeout(() => { try { lucide.createIcons(); } catch (e) {} }, 20);
+}

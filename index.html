@@ -4,10 +4,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MedPrepAide — NEET PG & INI-CET All 19 Subjects Preparation Aide</title>
-  <link rel="stylesheet" href="tailwind.css?v=20261118f">
+  <link rel="stylesheet" href="tailwind.css?v=20261118g">
   <!-- Lucide Icons -->
   <script src="vendor/lucide.min.js"></script>
-  <link rel="stylesheet" href="style.css?v=20261118f">
+  <link rel="stylesheet" href="style.css?v=20261118g">
 </head>
 <body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col font-sans antialiased selection:bg-indigo-100 selection:text-indigo-800">
 
@@ -60,7 +60,7 @@
         <i data-lucide="grid" class="w-4 h-4"></i>
         <span>19 Subjects</span>
       </button>
-      <button onclick="dtOpen()" id="tab-daily" class="nav-tab py-2.5 sm:py-3 border-b-2 flex items-center space-x-1.5 sm:space-x-2 text-slate-500 hover:text-slate-900">
+      <button onclick="dtLanding()" id="tab-daily" class="nav-tab py-2.5 sm:py-3 border-b-2 flex items-center space-x-1.5 sm:space-x-2 text-slate-500 hover:text-slate-900">
         <span id="dt-light" class="dt-light dt-none" role="button" aria-label="Schedule status" onclick="event.stopPropagation(); dtShowStatus()"></span>
         <i data-lucide="target" class="w-4 h-4 text-rose-500"></i>
         <span>Daily Target</span>
@@ -733,6 +733,11 @@
       </div>
     </section>
 
+    <!-- DAILY TARGET LANDING -->
+    <section id="view-daily" class="hidden space-y-4">
+      <div id="dt-landing" class="space-y-4"></div>
+    </section>
+
     <!-- ========================================================================= -->
     <!-- VIEW 8: GLOBAL DAILY SPACED REVISION (SRS WITH PERSISTENT OVERDUE DAYS) -->
     <!-- ========================================================================= -->
@@ -745,7 +750,7 @@
             </div>
             <div>
               <h3 class="text-base sm:text-lg font-bold text-slate-900">Global Daily Spaced Revision Hub</h3>
-              <p class="text-xs text-slate-500">Missed reviews NEVER disappear. Questions remain as 'Overdue by X days' until you review them.</p>
+              <p class="text-xs text-slate-500">Questions you got wrong come back after <span id="srs-hub-steps">1, 3, 7 and 14</span> days (choose the steps and which modes count in Settings). Missed reviews never disappear: they stay as 'Overdue by X days' until you review them.</p>
             </div>
           </div>
           <button id="btn-start-srs-quiz" onclick="startSrsDrill()" class="hidden px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs sm:text-sm font-semibold shadow-md shadow-rose-500/20 transition flex items-center justify-center space-x-2">
@@ -892,6 +897,8 @@
           <label class="flex-1 py-2 border border-slate-300 text-slate-700 hover:bg-slate-100 font-semibold rounded-lg text-xs transition text-center cursor-pointer">Restore log<input type="file" accept="application/json,.json" class="hidden" onchange="importAnswerLog(this)"></label>
         </div>
       </div>
+
+      <div id="settings-srs"></div>
 
       <div id="settings-extra" class="space-y-5"></div>
     </div>
@@ -1065,8 +1072,8 @@
   </div>
 
   <!-- DATA & APP LOGIC SCRIPTS -->
-  <script src="data/index.js?v=20261118f"></script>
-  <script src="app.js?v=20261118f"></script>
+  <script src="data/index.js?v=20261118g"></script>
+  <script src="app.js?v=20261118g"></script>
 <div id="loading-overlay" class="hidden fixed inset-0 z-[100] bg-slate-900/60 flex items-center justify-center"><div class="bg-white rounded-2xl px-6 py-5 text-sm font-semibold text-slate-700 shadow-xl">Loading questions…</div></div>
 </body>
 </html>
