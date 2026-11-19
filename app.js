@@ -60,7 +60,7 @@ const SUBJECT_CATEGORIES = {
 // -------------------------------------------------------------
 // LAZY PER-SUBJECT QUESTION LOADING (home page loads only the index)
 // -------------------------------------------------------------
-const DATA_VERSION = '20261118k';
+const DATA_VERSION = '20261119a';
 const REPO_ISSUES_URL = 'https://github.com/MuhsinVC/neet-pg-app/issues/new';
 const _subjectLoads = {};
 
@@ -2627,6 +2627,7 @@ function toggleSettingsModal() {
     rvRenderSettings();
     srsRenderSettings();
     pwaRenderSettings();
+    tourRenderSettings();
     alogAll().then(a => { const el = document.getElementById('pg-log-count'); if (el) el.textContent = a.length; });
   }
 }
@@ -2696,7 +2697,7 @@ function stEnsureTopics() {
   if (ST.loading) return ST.loading;
   ST.loading = new Promise(res => {
     const s = document.createElement('script');
-    s.src = 'data/topics.js?v=20261118k';
+    s.src = 'data/topics.js?v=20261119a';
     s.onload = () => res(window.TOPIC_DATA || null);
     s.onerror = () => { ST.loading = null; res(null); };
     document.head.appendChild(s);
@@ -3932,6 +3933,7 @@ function navPush(viewName) {
 try { history.replaceState({ v: 'home' }, ''); } catch (e) {}
 function navCloseOverlay() {
   const open = id => { const el = document.getElementById(id); return el && !el.classList.contains('hidden'); };
+  if (TOUR.on) { tourClose(true); return 'tour'; }
   if (open('image-modal')) { closeImageModal(); return true; }
   if (open('palette-modal')) { togglePaletteModal(); return true; }
   if (open('about-modal')) { toggleAboutModal(); return true; }
@@ -3960,7 +3962,7 @@ function navGo(v) {
 }
 window.addEventListener('popstate', e => {
   const keep = () => { try { history.pushState({ v: state.currentView }, ''); } catch (x) {} };
-  if (navCloseOverlay()) { keep(); return; }
+  const ov = navCloseOverlay(); if (ov) { if (ov !== 'tour') keep(); return; }
   if (state.currentView === 'quiz') {
     if (state.quizMode === 'GRAND_TEST' && state.timerInterval) {
       if (!confirm('Leave the Grand Test?\n\nThe test will stop and your answers will not be scored. Press Cancel to keep going.')) { keep(); return; }
@@ -3972,4 +3974,219 @@ window.addEventListener('popstate', e => {
   let v = (e.state && e.state.v) || 'home';
   if (v === 'quiz' || v === 'post-test') v = navMenuFor();
   navGo(v);
+});
+
+
+// ================= Quick Start tour (20261119a) =================
+let TOUR_SKIP_POP = false;
+window.addEventListener('popstate', e => { if (TOUR_SKIP_POP) { TOUR_SKIP_POP = false; e.stopImmediatePropagation(); } }, true);
+const TOUR = { on: false, i: 0, el: null, card: null, spot: null, leave: null };
+function tourOff() { return !!pgSettings().tourOff; }
+function tourSetOff(v) {
+  const s = pgSettings(); s.tourOff = !!v;
+  try { localStorage.setItem('MEDAIDE_SETTINGS_V1', JSON.stringify(s)); } catch (e) {}
+  document.querySelectorAll('.tour-off-cb').forEach(c => { c.checked = !!v; });
+  const sc = document.getElementById('tour-startup-cb'); if (sc) sc.checked = !v;
+}
+function tourGo(view) {
+  NAV_POPPING = true;
+  try {
+    if (view === 'strengths') ST._autoSurvey = true; // the tour must not open the plan wizard on top of itself
+    if (view === 'daily') dtLanding(); else if (view === 'home') goToHome(); else switchView(view);
+  } finally { NAV_POPPING = false; }
+}
+const tourQ = s => () => document.querySelector(s);
+const TOUR_STEPS = [
+  { kind: 'welcome' },
+  { view: 'home', target: () => { const b = document.getElementById('toggle-filter-pyq'); return b && b.parentElement; }, icon: 'layers', color: 'indigo',
+    title: 'Pick your question pool',
+    body: '<p><b>PYQ</b>: previous-year recall questions from NEET PG, INI-CET and other PG exams.</p><p><b>Additional</b>: high-yield practice questions in the NBE and AIIMS style.</p><p><b>Extreme</b>: hard, multi-step questions written by AI and still being checked.</p><p class="tour-tip">Every test, drill and count in the app follows this switch.</p>' },
+  { view: 'home', target: () => document.getElementById('tab-home').parentElement, icon: 'map', color: 'indigo',
+    title: 'Your map of the app',
+    body: '<p>Everything lives in these tabs. The next steps visit each one, so you know what is where.</p><p class="tour-tip">On a phone, swipe the tab bar sideways to see them all.</p>' },
+  { view: 'home', target: tourQ('#subjects-grid > *'), icon: 'library', color: 'indigo',
+    title: 'Study subject by subject',
+    body: '<p>Tap a subject to open its units. Each unit has:</p><ul><li><b>Practice</b>: instant feedback, explanation and pearl after every answer; your progress is saved.</li><li><b>Theory</b>: the unit\'s notes.</li><li><b>Rapid fire</b>: a quick drill on that unit.</li></ul><p class="tour-tip">The filter chips above the grid sort subjects by stage: pre-clinical, para-clinical and clinical.</p>' },
+  { view: 'home', target: () => document.getElementById('tab-daily'), icon: 'target', color: 'rose',
+    title: 'Daily Target: your plan, one day at a time',
+    body: '<p>Tell the app your exam date once. It splits the bank into study and revision cycles and gives you a number of questions for each day.</p><p>The dot next to the tab shows how you are doing: <span class="tour-dot g"></span> ahead, <span class="tour-dot o"></span> on time, <span class="tour-dot r"></span> behind.</p>' },
+  { view: 'daily', target: tourQ('#dt-landing'), icon: 'calendar-check', color: 'rose',
+    title: 'Today at a glance',
+    body: '<p>This page shows today\'s progress and how many reviews are due.</p><ul><li><b>Start Daily Target</b>: today\'s new questions, then revision.</li><li><b>Open Spaced Review</b>: questions you got wrong, due again.</li><li><b>Catch up</b> if you fall behind, <b>Do more</b> on keen days.</li></ul><p class="tour-tip">Do the reviews first: they are the questions you are closest to forgetting.</p>' },
+  { view: 'grand-test', target: tourQ('#view-grand-test'), icon: 'award', color: 'amber',
+    title: 'Rehearse exam day with Grand Tests',
+    body: '<p>Full and mini NEET PG and INI-CET mocks with the real number of questions, time and marking. You get a question palette, Mark for Review and a countdown.</p><p><b>Revision tests</b> at the top are built from your weak areas.</p><p class="tour-tip">The review shows your score per subject and the <b>time you spent on each question</b>.</p>' },
+  { view: 'rapid-fire', target: tourQ('#view-rapid-fire'), icon: 'flame', color: 'amber',
+    title: 'Rapid Fire for quick recall',
+    body: '<p>An endless run of shuffled questions from all subjects, a group, one subject or one unit. Your streak and accuracy update as you go.</p><p class="tour-tip">Good for ten spare minutes between classes.</p>' },
+  { view: 'theory', target: tourQ('#view-theory'), icon: 'book-open', color: 'emerald',
+    title: 'Quick Theory: read before you drill',
+    body: '<p>Concise notes for every unit, with tables and mnemonics folded in. Use the contents panel to jump around, and search to find a drug or a sign.</p>' },
+  { view: 'srs', target: tourQ('#view-srs > div'), icon: 'calendar-clock', color: 'rose',
+    title: 'Spaced Review: never forget a mistake',
+    body: '<p>A question you get wrong comes back after <b>1, 3, 7 and 14 days</b>. Answer it right each time and it retires; get it wrong and it starts again.</p><p>Missed reviews never vanish: they wait as "Overdue".</p><p class="tour-tip">In Settings you can choose the steps and which modes add questions.</p>' },
+  { view: 'notebook', target: tourQ('#nb-tabs'), icon: 'notebook-pen', color: 'amber',
+    title: 'Your 20th Notebook',
+    body: '<p><b>Mistakes</b>: every question you got wrong, with the right answer, the explanation and the pearl. You can filter and search them.</p><p><b>Bookmarks</b>: questions you chose to keep. Tap <b>Bookmark</b> on any question to add it, then drill your bookmarks any time.</p>' },
+  { view: 'strengths', target: tourQ('#mp-container'), icon: 'gauge', color: 'emerald',
+    title: 'My Strengths: know your weak spots',
+    body: '<p>A 0 to 100 strength for every subject, unit and topic, worked out from your answers. Bands run from Weak through Developing and Strong to Mastered.</p><p><b>Mistake patterns</b> at the top tell you <i>how</i> you go wrong, for example misreading or rushing.</p><p class="tour-tip">Take the <b>starting confidence survey</b> so the ratings start from your own view of each subject.</p>' },
+  { kind: 'question' },
+  { view: 'home', open: () => { const m = document.getElementById('fab-menu-popover'); if (m && m.classList.contains('hidden')) toggleFabMenu(); },
+    leave: () => { const m = document.getElementById('fab-menu-popover'); if (m && !m.classList.contains('hidden')) toggleFabMenu(); },
+    target: tourQ('#fab-menu-popover'), icon: 'sliders-horizontal', color: 'indigo',
+    title: 'Quick Actions: one tap away',
+    body: '<p>The round button at the bottom right opens this menu from any screen. In it you will find:</p><ul><li>today\'s Daily Target status and reviews due</li><li>Settings, Backup, Install app and About us</li><li>this Quick Start guide, if you want it again</li></ul>' },
+  { view: 'home', open: () => { const m = document.getElementById('settings-modal'); if (m && m.classList.contains('hidden')) toggleSettingsModal(); },
+    leave: () => { const m = document.getElementById('settings-modal'); if (m && !m.classList.contains('hidden')) toggleSettingsModal(); },
+    target: tourQ('#settings-modal > div'), icon: 'settings', color: 'indigo',
+    title: 'Settings: make it yours',
+    body: '<ul><li><b>"Why did I miss this?"</b>: one tap after a wrong answer sharpens your Mistake patterns.</li><li><b>Answer log</b>: download or restore every answer you have given.</li><li><b>Spaced Review</b>: choose the steps and which modes add questions.</li><li><b>Revision mix</b>, <b>study plan</b>, and <b>offline</b> status.</li></ul><p class="tour-tip">You can restart this tour from here at any time.</p>' },
+  { kind: 'install' },
+  { kind: 'finish' }
+];
+function tourIcon(name, color) { return '<span class="tour-ic tour-' + (color || 'indigo') + '"><i data-lucide="' + name + '" class="w-5 h-5"></i></span>'; }
+function tourCheckbox() {
+  return '<label class="tour-cb"><input type="checkbox" class="tour-off-cb" ' + (tourOff() ? 'checked ' : '') + 'onchange="tourSetOff(this.checked)"> Don\'t show at start-up</label>';
+}
+function tourFooter(i, n) {
+  const dots = TOUR_STEPS.map((s, k) => '<span class="tour-pip' + (k === i ? ' on' : k < i ? ' done' : '') + '"></span>').join('');
+  return '<div class="tour-pips">' + dots + '</div><div class="tour-foot">' + tourCheckbox() + '<div class="tour-btns">' +
+    (i > 1 ? '<button type="button" class="tour-b2" onclick="tourStep(-1)">Back</button>' : '') +
+    '<button type="button" class="tour-b1" onclick="tourStep(1)">' + (i === n - 2 ? 'Last step' : 'Next') + ' <span aria-hidden="true">→</span></button></div></div>';
+}
+function tourStepHtml(st, i, n) {
+  if (st.kind === 'welcome') return '<div class="tour-hero"><div class="tour-logo"><i data-lucide="activity" class="w-7 h-7"></i></div><div><div class="tour-kicker">Quick Start</div><h3>Welcome to MedPrepAide</h3>' +
+    '<p>Your NEET PG and INI-CET companion: a large question bank, theory, exam-style tests, and a coach that plans your days and keeps your revision pointed at your weak spots.</p></div></div>' +
+    '<div class="tour-feats">' + [['library', 'Question bank and theory'], ['target', 'Daily plan to your exam'], ['calendar-clock', 'Spaced Review of mistakes'], ['gauge', 'Strength ratings and patterns'], ['award', 'Exam-style Grand Tests'], ['wifi-off', 'Works offline as an app']]
+      .map(f => '<div><i data-lucide="' + f[0] + '" class="w-4 h-4"></i>' + f[1] + '</div>').join('') + '</div>' +
+    '<p class="tour-small">This short tour shows you around in about 3 minutes. It points at the real screens, and you can stop at any time.</p>' +
+    '<div class="tour-foot">' + tourCheckbox() + '<div class="tour-btns"><button type="button" class="tour-b2" onclick="tourClose()">Skip for now</button><button type="button" class="tour-b1" onclick="tourStep(1)">Start the tour <span aria-hidden="true">→</span></button></div></div>';
+  if (st.kind === 'question') return '<div class="tour-head">' + tourIcon('mouse-pointer-click', 'indigo') + '<div><div class="tour-kicker">Step ' + i + ' of ' + (n - 1) + '</div><h4>Inside a question</h4></div></div>' +
+    '<div class="tour-mock"><div class="tm-top"><span class="tm-src">PG recall 2023</span><span class="tm-subj">Pharmacology</span><span class="tm-r"><span class="tm-bm"><i data-lucide="bookmark" class="w-3 h-3"></i>Bookmark<b class="tm-n">1</b></span><span class="tm-rep">Report<b class="tm-n">2</b></span></span></div>' +
+    '<div class="tm-q">Drug of choice for absence seizures in a 7-year-old?</div><div class="tm-o ok">A. Ethosuximide<b class="tm-n">3</b></div><div class="tm-o bad">B. Carbamazepine</div>' +
+    '<div class="tm-ex"><b>Rationale</b> Ethosuximide blocks T-type calcium channels… <span class="tm-pearl">Pearl: carbamazepine can worsen absence seizures.</span><b class="tm-n">4</b></div>' +
+    '<div class="tm-why">Why did I miss this? <span>Didn\'t know</span><span>Misread</span><span>Changed answer</span><b class="tm-n">5</b></div></div>' +
+    '<ol class="tour-legend"><li><b>Bookmark</b> keeps the question in your Notebook.</li><li><b>Report</b> tells us about a wrong answer or a typo.</li><li>Feedback appears straight away in Practice, Rapid Fire and Daily Target. Grand Tests show it at the end.</li><li>Every answer comes with an explanation and a high-yield <b>pearl</b>.</li><li>One optional tap tells the app <i>why</i> you missed. It feeds your Mistake patterns.</li></ol>' +
+    tourFooter(i, n);
+  if (st.kind === 'install') {
+    const inst = pwaStandalone() ? '<p class="tour-ok">✓ You are already using the installed app.</p>' :
+      PWA_PROMPT ? '<button type="button" class="tour-b1 tour-wide" onclick="pwaInstall()"><i data-lucide="download" class="w-4 h-4"></i> Install MedPrepAide</button>' :
+      pwaIOS() ? '<p class="tour-tip">On iPhone or iPad: tap <b>Share</b>, then <b>Add to Home Screen</b>.</p>' : '<p class="tour-tip">Use the browser menu: <b>Install app</b> or <b>Add to Home screen</b>.</p>';
+    return '<div class="tour-head">' + tourIcon('smartphone', 'emerald') + '<div><div class="tour-kicker">Step ' + i + ' of ' + (n - 1) + '</div><h4>Install it and study offline</h4></div></div>' +
+      '<p>Add MedPrepAide to your home screen and it opens like an app, even with no internet. Each subject is saved on your device the first time you open it.</p>' + inst +
+      '<p class="tour-warn"><b>Your progress lives on this device.</b> Copy a backup code now and then (Quick Actions → Device Storage &amp; Backup), especially before changing phones.</p>' + tourFooter(i, n);
+  }
+  if (st.kind === 'finish') {
+    const a = (ic, t, s, fn) => '<button type="button" class="tour-act" onclick="tourClose(); ' + fn + '">' + tourIcon(ic, 'indigo') + '<span><b>' + t + '</b><small>' + s + '</small></span><i data-lucide="chevron-right" class="w-4 h-4"></i></button>';
+    return '<div class="tour-head">' + tourIcon('rocket', 'emerald') + '<div><div class="tour-kicker">You are ready</div><h4>Your first ten minutes</h4></div></div><p>A good way to begin:</p>' +
+      '<div class="tour-acts">' + a('calendar-range', state.userData.plan ? 'Review your study plan' : 'Set up your study plan', 'Exam date, cycles and daily numbers (2 minutes)', 'planOpen()') +
+      a('clipboard-check', 'Take the confidence survey', 'Rate each subject once for a head start', "tourGo('strengths'); setTimeout(() => { if (!ST.showSurvey) stToggleSurvey(); }, 400)") +
+      a('pencil-line', 'Try 10 practice questions', 'Open any subject and press Practice', "tourGo('home')") +
+      a('target', 'Open today\'s Daily Target', 'Start once your plan is set', "tourGo('daily')") + '</div>' +
+      '<div class="tour-foot">' + tourCheckbox() + '<div class="tour-btns"><button type="button" class="tour-b2" onclick="tourStep(-1)">Back</button><button type="button" class="tour-b1" onclick="tourClose()">Finish</button></div></div>' +
+      '<p class="tour-small">You can take this tour again from Settings or Quick Actions.</p>';
+  }
+  return '<div class="tour-head">' + tourIcon(st.icon, st.color) + '<div><div class="tour-kicker">Step ' + i + ' of ' + (n - 1) + '</div><h4>' + st.title + '</h4></div></div>' +
+    '<div class="tour-body">' + st.body + '</div>' + tourFooter(i, n);
+}
+function tourEnsureDom() {
+  if (TOUR.el) return;
+  const root = document.createElement('div'); root.id = 'tour-root'; root.setAttribute('role', 'dialog'); root.setAttribute('aria-modal', 'true');
+  root.innerHTML = '<div class="tour-shade"></div><div class="tour-spot hidden"></div><div class="tour-card" tabindex="-1"><button type="button" class="tour-x" onclick="tourClose()" aria-label="Close the tour">×</button><div class="tour-inner"></div></div>';
+  document.body.appendChild(root);
+  TOUR.el = root; TOUR.card = root.querySelector('.tour-card'); TOUR.spot = root.querySelector('.tour-spot');
+  window.addEventListener('resize', () => { if (TOUR.on) tourPlace(); });
+  window.addEventListener('scroll', () => { if (TOUR.on) tourPlace(); }, { passive: true });
+  document.addEventListener('keydown', e => {
+    if (!TOUR.on) return;
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); tourClose(); }
+    else if (e.key === 'ArrowRight' && TOUR.i < TOUR_STEPS.length - 1) tourStep(1);
+    else if (e.key === 'ArrowLeft' && TOUR.i > 1) tourStep(-1);
+  }, true);
+}
+function tourTarget() { const st = TOUR_STEPS[TOUR.i]; try { return st.target ? st.target() : null; } catch (e) { return null; } }
+function tourPlace() {
+  const t = tourTarget(), card = TOUR.card, spot = TOUR.spot, vw = window.innerWidth, vh = window.innerHeight;
+  const phone = vw < 640;
+  card.style.left = card.style.top = card.style.bottom = card.style.right = '';
+  card.classList.toggle('tour-sheet', false);
+  if (!t || !t.getClientRects().length) {
+    spot.classList.add('hidden'); TOUR.el.classList.add('tour-dim');
+    card.classList.add('tour-center'); return;
+  }
+  TOUR.el.classList.remove('tour-dim'); card.classList.remove('tour-center');
+  const r = t.getBoundingClientRect(), pad = 6;
+  const top = Math.max(4, r.top - pad), left = Math.max(4, r.left - pad);
+  const w = Math.min(vw - 8, r.width + 2 * pad), h = Math.min(Math.max(24, r.bottom + pad) - top, vh - 8);
+  spot.classList.remove('hidden');
+  Object.assign(spot.style, { top: top + 'px', left: left + 'px', width: Math.max(24, w) + 'px', height: Math.max(24, h) + 'px' });
+  const ch = card.offsetHeight, cw = card.offsetWidth;
+  if (phone) {
+    card.classList.add('tour-sheet');
+    if (r.top + r.height / 2 > vh * 0.5) card.style.top = '10px'; else card.style.bottom = '10px';
+    return;
+  }
+  let x = Math.min(Math.max(12, r.left + r.width / 2 - cw / 2), vw - cw - 12), y = r.bottom + 14;
+  if (y + ch > vh - 10) y = r.top - ch - 14;
+  if (y < 10) {
+    // no room above or below: put the card beside the target, else float it over a big target
+    const side = r.left - cw - 18 >= 10 ? r.left - cw - 18 : (r.right + 18 + cw <= vw - 10 ? r.right + 18 : null);
+    if (side !== null) { x = side; y = Math.max(10, Math.min(vh - ch - 10, r.top)); }
+    else y = Math.max(10, Math.min(vh - ch - 10, r.top + 20));
+  }
+  card.style.top = y + 'px'; card.style.left = x + 'px';
+}
+async function tourRender() {
+  const n = TOUR_STEPS.length, st = TOUR_STEPS[TOUR.i];
+  if (TOUR.leave) { try { TOUR.leave(); } catch (e) {} TOUR.leave = null; }
+  if (st.view) { tourGo(st.view); await new Promise(r => setTimeout(r, st.view === 'strengths' || st.view === 'daily' || st.view === 'theory' ? 700 : 250)); }
+  if (st.open) { st.open(); await new Promise(r => setTimeout(r, 450)); }
+  TOUR.leave = st.leave || null;
+  const inner = TOUR.card.querySelector('.tour-inner');
+  inner.innerHTML = tourStepHtml(st, TOUR.i, n);
+  TOUR.card.classList.toggle('tour-big', !!st.kind);
+  try { lucide.createIcons(); } catch (e) {}
+  const t = tourTarget();
+  if (t) {
+    const r = t.getBoundingClientRect();
+    if (r.top < 70 || r.bottom > window.innerHeight - 40) t.scrollIntoView({ block: r.height > window.innerHeight * 0.6 ? 'start' : 'center' });
+    if (t.closest('nav, .overflow-x-auto') || /^tab-/.test(t.id || '')) t.scrollIntoView({ inline: 'center', block: 'nearest' });
+    await new Promise(r => setTimeout(r, 120));
+  }
+  tourPlace();
+  TOUR.card.focus({ preventScroll: true });
+}
+function tourOpen(i) {
+  tourEnsureDom();
+  if (typeof toggleFabMenu === 'function') { const m = document.getElementById('fab-menu-popover'); if (m && !m.classList.contains('hidden')) toggleFabMenu(); }
+  const sm = document.getElementById('settings-modal'); if (sm && !sm.classList.contains('hidden')) toggleSettingsModal();
+  if (!TOUR.on) { try { history.pushState({ v: state.currentView, tour: 1 }, ''); } catch (e) {} }
+  TOUR.on = true; TOUR.i = i || 0;
+  TOUR.el.classList.add('tour-show'); document.body.classList.add('tour-lock');
+  tourRender();
+}
+function tourStep(d) { const n = TOUR_STEPS.length; TOUR.i = Math.max(0, Math.min(n - 1, TOUR.i + d)); tourRender(); }
+function tourClose(fromBack) {
+  if (!TOUR.on) return;
+  if (!fromBack && history.state && history.state.tour) { TOUR_SKIP_POP = true; try { history.back(); } catch (e) { TOUR_SKIP_POP = false; } }
+  if (TOUR.leave) { try { TOUR.leave(); } catch (e) {} TOUR.leave = null; }
+  TOUR.on = false; TOUR.el.classList.remove('tour-show'); document.body.classList.remove('tour-lock');
+  try { const s = pgSettings(); s.tourSeen = (s.tourSeen || 0) + 1; localStorage.setItem('MEDAIDE_SETTINGS_V1', JSON.stringify(s)); } catch (e) {}
+}
+function tourStart() { tourOpen(0); }
+function tourRenderSettings() {
+  const box = document.getElementById('settings-tour'); if (!box) return;
+  box.innerHTML = '<div class="bg-indigo-50/60 border border-indigo-200 rounded-xl p-3.5 space-y-2.5"><div class="flex items-center justify-between gap-2"><div class="text-xs font-bold text-slate-800">Quick Start tour</div>' +
+    '<button type="button" onclick="toggleSettingsModal(); tourOpen(1)" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold">Start the tour</button></div>' +
+    '<p class="text-[11px] text-slate-600 leading-relaxed">A 3-minute guided walk through every part of the app, pointing at the real screens.</p>' +
+    '<label class="flex items-center gap-2 text-xs text-slate-800 cursor-pointer"><input id="tour-startup-cb" type="checkbox" class="w-4 h-4 accent-indigo-600" ' + (tourOff() ? '' : 'checked ') + 'onchange="tourSetOff(!this.checked)"> Show the welcome tour when the app opens</label></div>';
+}
+window.addEventListener('DOMContentLoaded', () => {
+  setTimeout(() => {
+    if (tourOff() || TOUR.on) return;
+    const busy = ['settings-modal', 'sync-modal', 'plan-modal', 'dt-modal', 'about-modal', 'image-modal'].some(id => { const el = document.getElementById(id); return el && !el.classList.contains('hidden'); });
+    if (busy || state.currentView !== 'home') return;
+    tourOpen(0);
+  }, 1200);
 });
